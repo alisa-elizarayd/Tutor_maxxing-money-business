@@ -1,0 +1,40 @@
+{
+  "name": "Репетитор: Календарь и Финансы",
+  "short_name": "Репетитор",
+  "description": "Календарь уроков и трекер оплат репетитора. Работает офлайн.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f4f9",
+  "theme_color": "#7B509F",
+  "lang": "ru",
+  "dir": "ltr",
+  "categories": ["education", "productivity", "finance"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
