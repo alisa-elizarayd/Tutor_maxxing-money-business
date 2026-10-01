@@ -166,7 +166,7 @@ body{
   -webkit-backdrop-filter: blur(10px);
   padding: 10px 15px;
   box-shadow: var(--shadow);
-  position: sticky; top: 52px; z-index: 100;
+  position: sticky; top: calc(52px + env(safe-area-inset-top)); z-index: 100;
   transition: background 0.3s;
 }
 
@@ -716,6 +716,9 @@ body{
     <div class="header-top">
       <h1>Мои уроки</h1>
       <div class="header-actions">
+        <button class="icon-btn" id="undoBtn" title="Отменить последнее действие">↶</button>
+        <button class="icon-btn" id="exportBtn" title="Экспорт">📤</button>
+        <button class="icon-btn" id="importBtn" title="Импорт">📥</button>
         <button class="icon-btn" id="themeToggle" title="Тема">🌙</button>
         <button class="icon-btn" id="settingsBtn" title="Настройки">⚙️</button>
       </div>
@@ -851,7 +854,37 @@ body{
       <button class="btn btn-primary" id="addFromDayBtn" style="width: 100%; margin-top: 15px;">+ Добавить урок</button>
     </div>
   </div>
+<!-- Модалка: экспорт за месяц -->
+  <div class="modal-card" id="exportMonthCard">
+    <div class="modal-header">
+      <h2>Экспорт уроков</h2>
+      <span class="close-btn" id="closeExportMonth">&times;</span>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:0.85rem; color:var(--text-secondary); margin:0 0 15px 0;">
+        Выберите что экспортировать в JSON-файл:
+      </p>
+      <div class="form-group">
+        <label>Месяц</label>
+        <select id="exportMonthSelect" style="width:100%; padding:10px; border-radius:8px; border:1px solid var(--input-border); background:var(--input-bg); color:var(--text); font-size:0.9rem;">
+        </select>
+      </div>
+      <button class="btn btn-primary" id="exportAllBtn" style="width:100%; margin-bottom:8px;">
+        📦 Экспортировать ВСЕ уроки
+      </button>
+      <button class="btn btn-secondary" id="exportMonthBtn" style="width:100%;">
+        📅 Экспортировать выбранный месяц
+      </button>
+      <div style="font-size:0.7rem; color:var(--text-muted); margin-top:12px; text-align:center;">
+        Файл сохранится как <b>tutor-calendar-YYYY-MM.json</b>
+      </div>
+    </div>
+  </div>
 
+  <!-- Скрытый input для импорта -->
+  <input type="file" id="importCalendarFile" accept=".json,application/json" style="display:none">
+
+  <!-- ⬆️⬆️⬆️ КОНЕЦ ВСТАВКИ ⬆️⬆️⬆️ -->
 </div><!-- /view-calendar -->
 
 <!-- ============================================================
@@ -909,6 +942,7 @@ body{
 <!-- ============================================================
      JS КАЛЕНДАРЯ
      ============================================================ -->
+
 <script>
 (function(){
   // === КОНФИГ ===
@@ -925,6 +959,49 @@ body{
   let currentTheme = localStorage.getItem('tutorTheme') || 'light';
   let currentSize = localStorage.getItem('tutorSize') || 'normal';
   let hideIndicator = localStorage.getItem('tutorHideIndicator') === 'true';
+
+  // === UNDO СТЕК ===
+  const UNDO_LIMIT = 20;
+  let undoStack = [];
+
+  function pushUndo(label){
+    undoStack.push({
+      lessons: JSON.parse(JSON.stringify(lessons)),
+      label,
+      time: Date.now()
+    });
+    if(undoStack.length > UNDO_LIMIT) undoStack.shift();
+    updateUndoBtn();
+  }
+
+  function updateUndoBtn(){
+    const btn = document.getElementById('undoBtn');
+    if(!btn) return;
+    if(undoStack.length === 0){
+      btn.style.opacity = '0.35';
+      btn.style.cursor = 'default';
+    } else {
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+    }
+  }
+
+  function performUndo(){
+    if(undoStack.length === 0){
+      alert('Нечего отменять — история пуста.');
+      return;
+    }
+    const last = undoStack.pop();
+    const confirmMsg = `↶ Отменить последнее действие?\n\nЧто отменяется: ${last.label}\nКогда: ${new Date(last.time).toLocaleTimeString()}`;
+    if(!confirm(confirmMsg)){
+      undoStack.push(last);
+      return;
+    }
+    lessons = last.lessons;
+    saveToStorage();
+    renderCalendar();
+    updateUndoBtn();
+  }
 
   const EMOJI_OPTIONS = [
     '🇷🇺','🇬🇧','🇺🇸','🇩🇪','🇫🇷','🇪🇸','🇮🇹','🇨🇳','🇯🇵','🇰🇷','🇸🇦','🇹🇷','🇵🇱','🇨🇿','🇸🇪','🇳🇴',
@@ -947,6 +1024,7 @@ body{
     return `url("data:image/svg+xml,${encoded}")`;
   }
 
+  // === SVG ФОНЫ (те же что были) ===
   const SVG_DOTS = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#f4f4f9"/><circle cx="20" cy="20" r="2" fill="#c8c8d0"/></svg>`;
   const SVG_GRID = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#fafafd"/><path d="M0 0 H40 M0 0 V40" stroke="#e0e0e8" stroke-width="1" fill="none"/></svg>`;
   const SVG_PAPER = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="40"><rect width="100" height="40" fill="#fdfdf9"/><line x1="0" y1="38" x2="100" y2="38" stroke="#d0d0d8" stroke-width="1"/></svg>`;
@@ -1047,12 +1125,18 @@ body{
   const modal = document.getElementById('modalCard');
   const settingsCard = document.getElementById('settingsCard');
   const dayDetailCard = document.getElementById('dayDetailCard');
+  const exportMonthCard = document.getElementById('exportMonthCard');
   const overlay = document.getElementById('overlay');
   const closeModalBtn = document.getElementById('closeModal');
   const closeSettings = document.getElementById('closeSettings');
   const closeDayDetail = document.getElementById('closeDayDetail');
+  const closeExportMonth = document.getElementById('closeExportMonth');
   const settingsBtn = document.getElementById('settingsBtn');
   const themeToggle = document.getElementById('themeToggle');
+  const undoBtn = document.getElementById('undoBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  const importBtn = document.getElementById('importBtn');
+  const importCalendarFile = document.getElementById('importCalendarFile');
   const saveBtn = document.getElementById('saveBtn');
   const deleteOneBtn = document.getElementById('deleteOneBtn');
   const deleteSeriesBtn = document.getElementById('deleteSeriesBtn');
@@ -1073,6 +1157,9 @@ body{
   const extendGroup = document.getElementById('extendGroup');
   const extendMonthsCheckbox = document.getElementById('extendMonths');
   const extendMonthsCount = document.getElementById('extendMonthsCount');
+  const exportMonthSelect = document.getElementById('exportMonthSelect');
+  const exportAllBtn = document.getElementById('exportAllBtn');
+  const exportMonthBtn = document.getElementById('exportMonthBtn');
 
   let editingId = null;
   let selectedDate = null;
@@ -1082,6 +1169,7 @@ body{
 
   const COLORS = ['#4CAF50','#2196F3','#FF9800','#E91E63','#9C27B0','#00BCD4','#795548','#607D8B'];
 
+  // === ФОРМАТ ВРЕМЕНИ ===
   function formatTimeInput(raw){
     if(!raw) return '';
     let cleaned = raw.toString().replace(/[^0-9]/g,'');
@@ -1097,6 +1185,7 @@ body{
 
   function isValidTime(str){ return /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(str); }
 
+  // === ИНИЦИАЛИЗАЦИЯ ===
   function populateMonthSelect(){
     monthSelect.innerHTML = '';
     for(let y = MIN_YEAR; y <= MAX_YEAR; y++){
@@ -1107,6 +1196,22 @@ body{
         if(y === currentYear && m === currentMonth) option.selected = true;
         monthSelect.appendChild(option);
       }
+    }
+  }
+
+  function populateExportMonthSelect(){
+    exportMonthSelect.innerHTML = '';
+    // Показываем последние 12 месяцев + текущий + 3 вперёд
+    const nowDate = new Date();
+    for(let offset = 12; offset >= -3; offset--){
+      const d = new Date(nowDate.getFullYear(), nowDate.getMonth() - offset, 1);
+      const y = d.getFullYear();
+      const m = d.getMonth();
+      const option = document.createElement('option');
+      option.value = `${y}-${String(m+1).padStart(2,'0')}`;
+      option.textContent = `${MONTHS[m]} ${y}`;
+      if(y === currentYear && m === currentMonth) option.selected = true;
+      exportMonthSelect.appendChild(option);
     }
   }
 
@@ -1192,6 +1297,7 @@ body{
     });
   }
 
+  // === СОЗДАНИЕ СЛОТА ===
   function createSlotElement(initialDay = null, initialTime = '', removable = true){
     const slot = document.createElement('div');
     slot.className = 'schedule-slot';
@@ -1346,6 +1452,7 @@ body{
 
   function saveToStorage(){ localStorage.setItem('tutorLessonsPro', JSON.stringify(lessons)); }
 
+  // === РЕНДЕР КАЛЕНДАРЯ ===
   function renderCalendar(){
     grid.innerHTML = '';
     DAYS_SHORT.forEach(day => {
@@ -1495,6 +1602,7 @@ body{
     modal.classList.remove('active');
     settingsCard.classList.remove('active');
     dayDetailCard.classList.remove('active');
+    if(exportMonthCard) exportMonthCard.classList.remove('active');
     overlay.classList.remove('active');
   }
 
@@ -1511,6 +1619,7 @@ body{
     });
   }
 
+  // === СОХРАНЕНИЕ УРОКА ===
   saveBtn.onclick = () => {
     const name = document.getElementById('studentName').value.trim();
     if(!name){ alert('Введите имя ученика'); return; }
@@ -1524,6 +1633,7 @@ body{
       emoji: lessonEmojiInput.value.trim()
     };
     if(editingId){
+      pushUndo(`Изменение урока «${name}»`);
       const slot = scheduleSlotsContainer.querySelector('.schedule-slot');
       const { time } = slot.getData();
       const index = lessons.findIndex(l => l.id === editingId);
@@ -1532,11 +1642,24 @@ body{
       const slots = Array.from(scheduleSlotsContainer.querySelectorAll('.schedule-slot'));
       const extendCount = extendMonthsCheckbox.checked ? parseInt(extendMonthsCount.value) : 0;
       let createdAny = false;
+      let totalCreated = 0;
+
+      // Сначала подготовим все данные
+      const previewData = slots.map(slot => slot.getData()).filter(d => d.days.length > 0 && d.time);
+
+      if(previewData.length === 0){
+        alert('Выберите дни недели и время для хотя бы одного слота');
+        return;
+      }
+
+      pushUndo(`Создание серии уроков «${name}» (${previewData.length} слот(ов))`);
+      const seriesGroupId = 'series_' + Date.now();
+
       slots.forEach(slot => {
         const { days, time } = slot.getData();
         if(days.length === 0 || !time) return;
         createdAny = true;
-        const seriesId = 'series_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+        const seriesId = seriesGroupId + '_' + Math.random().toString(36).substr(2,5);
         for(let monthOffset = 0; monthOffset <= extendCount; monthOffset++){
           const targetDate = new Date(currentYear, currentMonth + monthOffset, 1);
           const tYear = targetDate.getFullYear();
@@ -1558,18 +1681,21 @@ body{
                   id: Date.now().toString() + Math.random().toString(36).substr(2,5),
                   seriesId, date: dateStr, time, ...cardData
                 });
+                totalCreated++;
               }
             }
           }
         }
       });
-      if(!createdAny){ alert('Выберите дни недели и время для хотя бы одного слота'); return; }
+      if(!createdAny){ alert('Не удалось создать уроки'); return; }
     }
     saveToStorage(); renderCalendar(); closeModals();
   };
 
   deleteOneBtn.onclick = () => {
     if(confirm('Удалить только этот урок?')){
+      const lesson = lessons.find(l => l.id === editingId);
+      pushUndo(`Удаление урока${lesson ? ' «' + lesson.name + '» ' + lesson.date : ''}`);
       lessons = lessons.filter(l => l.id !== editingId);
       saveToStorage(); renderCalendar(); closeModals();
     }
@@ -1578,6 +1704,8 @@ body{
   deleteSeriesBtn.onclick = () => {
     if(!currentSeriesId) return;
     if(confirm('Удалить ВСЕ уроки этой серии?')){
+      const count = lessons.filter(l => l.seriesId === currentSeriesId).length;
+      pushUndo(`Удаление серии (${count} урок(ов))`);
       lessons = lessons.filter(l => l.seriesId !== currentSeriesId);
       saveToStorage(); renderCalendar(); closeModals();
     }
@@ -1668,7 +1796,153 @@ body{
   closeModalBtn.onclick = closeModals;
   closeSettings.onclick = closeModals;
   closeDayDetail.onclick = closeModals;
+  if(closeExportMonth) closeExportMonth.onclick = closeModals;
   overlay.onclick = closeModals;
+
+  // === UNDO КНОПКА ===
+  undoBtn.onclick = () => {
+    performUndo();
+  };
+
+  // === ЭКСПОРТ ===
+  exportBtn.onclick = () => {
+    populateExportMonthSelect();
+    exportMonthCard.classList.add('active');
+    overlay.classList.add('active');
+  };
+
+  exportAllBtn.onclick = () => {
+    if(lessons.length === 0){ alert('Нет уроков для экспорта.'); return; }
+    const payload = {
+      app: 'tutor-calendar',
+      version: 1,
+      scope: 'all',
+      exportedAt: new Date().toISOString(),
+      count: lessons.length,
+      lessons: lessons
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const d = new Date();
+    const stamp = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const a = document.createElement('a');
+    a.href = url; a.download = `tutor-calendar-ALL-${stamp}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    closeModals();
+  };
+
+  exportMonthBtn.onclick = () => {
+    const val = exportMonthSelect.value; // "YYYY-MM"
+    if(!val) return;
+    const [y, m] = val.split('-').map(Number);
+    const monthStr = `${y}-${String(m).padStart(2,'0')}`;
+    const monthLessons = lessons.filter(l => l.date && l.date.startsWith(monthStr));
+    if(monthLessons.length === 0){
+      alert(`За ${MONTHS[m-1].toLowerCase()} ${y} нет уроков для экспорта.`);
+      return;
+    }
+    const payload = {
+      app: 'tutor-calendar',
+      version: 1,
+      scope: 'month',
+      month: monthStr,
+      exportedAt: new Date().toISOString(),
+      count: monthLessons.length,
+      lessons: monthLessons
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `tutor-calendar-${monthStr}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    closeModals();
+  };
+
+  // === ИМПОРТ ===
+  importBtn.onclick = () => {
+    importCalendarFile.click();
+  };
+
+  importCalendarFile.onchange = (event) => {
+    const file = event.target.files && event.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if(!data || typeof data !== 'object'){ alert('Файл повреждён.'); return; }
+        if(!Array.isArray(data.lessons)){ alert('Это не файл экспорта календаря.'); return; }
+
+        const incoming = data.lessons;
+        const scope = data.scope || 'unknown';
+        const scopeLabel = scope === 'all' ? 'ВСЕ уроки' : (scope === 'month' ? `месяц ${data.month}` : 'неизвестный диапазон');
+
+        const choice = confirm(
+          `📥 Найдено ${incoming.length} урок(ов) (${scopeLabel}).\n\n` +
+          `Нажмите ОК — ДОБАВИТЬ к существующим (объединение)\n` +
+          `Нажмите Отмена — ЗАМЕНИТЬ все уроки на импортированные`
+        );
+
+        pushUndo(`Импорт уроков (${incoming.length} шт.)`);
+
+        if(choice){
+          // Объединение: добавляем только те, у которых нет совпадения по (date + name + time)
+          let added = 0, skipped = 0;
+          incoming.forEach(inc => {
+            const exists = lessons.some(l => l.date === inc.date && l.name === inc.name && l.time === inc.time);
+            if(exists){ skipped++; return; }
+            // Убедимся, что есть id и seriesId
+            lessons.push({
+              id: inc.id || (Date.now().toString() + Math.random().toString(36).substr(2,5)),
+              seriesId: inc.seriesId || null,
+              date: inc.date,
+              time: inc.time || '',
+              name: inc.name || '',
+              plan: inc.plan || '',
+              homeworkGiven: inc.homeworkGiven || '',
+              homeworkLink: inc.homeworkLink || '',
+              homeworkNext: inc.homeworkNext || '',
+              link: inc.link || '',
+              color: inc.color || '#4CAF50',
+              emoji: inc.emoji || ''
+            });
+            added++;
+          });
+          saveToStorage();
+          renderCalendar();
+          closeModals();
+          alert(`✅ Готово!\n\nДобавлено: ${added}\nПропущено (уже есть): ${skipped}`);
+        } else {
+          // Замена
+          lessons = incoming.map(inc => ({
+            id: inc.id || (Date.now().toString() + Math.random().toString(36).substr(2,5)),
+            seriesId: inc.seriesId || null,
+            date: inc.date,
+            time: inc.time || '',
+            name: inc.name || '',
+            plan: inc.plan || '',
+            homeworkGiven: inc.homeworkGiven || '',
+            homeworkLink: inc.homeworkLink || '',
+            homeworkNext: inc.homeworkNext || '',
+            link: inc.link || '',
+            color: inc.color || '#4CAF50',
+            emoji: inc.emoji || ''
+          }));
+          saveToStorage();
+          renderCalendar();
+          closeModals();
+          alert(`✅ Заменено! Загружено ${lessons.length} урок(ов).`);
+        }
+      } catch(err){
+        alert('Не удалось прочитать файл. Убедитесь, что это JSON-файл экспорта календаря.');
+        console.warn(err);
+      }
+      event.target.value = '';
+    };
+    reader.readAsText(file);
+  };
 
   // === ЗАПУСК ===
   populateMonthSelect();
@@ -1678,7 +1952,11 @@ body{
   applyBackground();
   renderEmojiPicker();
   renderCalendar();
+  updateUndoBtn();
 })();
+
+
+
 </script>
 
 <!-- ============================================================
