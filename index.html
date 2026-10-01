@@ -29,11 +29,9 @@ body{
   overflow-x:hidden;
 }
 
-/* Скрываем неактивные вкладки */
 .app-view{display:none !important;}
 .app-view.active{display:block !important;}
 
-/* Верхний переключатель вкладок */
 .app-tabs{
   position:sticky;
   top:0;
@@ -80,7 +78,7 @@ body{
 </style>
 
 <!-- ============================================================
-     СТИЛИ КАЛЕНДАРЯ (изолированы в #view-calendar)
+     СТИЛИ КАЛЕНДАРЯ
      ============================================================ -->
 <style>
 #view-calendar{
@@ -445,10 +443,68 @@ body{
 #view-calendar .day-detail-card .dd-name { font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 6px; }
 #view-calendar .day-detail-card .dd-time { font-size: 0.8rem; color: var(--text-secondary); margin-top: 3px; }
 #view-calendar .day-detail-card .dd-plan { font-size: 0.8rem; color: var(--text-secondary); margin-top: 5px; opacity: 0.85; }
+
+/* === DRAG AND DROP === */
+#view-calendar .student-card{
+  cursor: grab;
+  -webkit-user-drag: element;
+  user-select: none;
+}
+#view-calendar .student-card:active{ cursor: grabbing; }
+#view-calendar .student-card.dragging{
+  opacity: 0.45;
+  transform: scale(0.96);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+}
+#view-calendar .day-cell.drag-over{
+  background: rgba(76,175,80,0.18) !important;
+  border: 2px dashed var(--primary) !important;
+  transform: scale(1.02);
+}
+#view-calendar .day-cell.drag-target{ transition: all 0.15s ease; }
+
+/* === МОДАЛКА ПЕРЕНОСА === */
+#view-calendar .move-preview{
+  background: var(--emoji-picker-bg);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 15px;
+  border-left: 4px solid var(--primary);
+}
+#view-calendar .move-preview .mp-label{
+  font-size: 0.7rem; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: .5px;
+  margin-bottom: 4px;
+}
+#view-calendar .move-preview .mp-value{
+  font-size: 1rem; font-weight: 700;
+  color: var(--text); margin-bottom: 8px;
+}
+#view-calendar .move-preview .mp-value:last-child{ margin-bottom: 0; }
+#view-calendar .move-preview .mp-arrow{
+  text-align: center; font-size: 1.2rem;
+  color: var(--primary); margin: 4px 0;
+}
+#view-calendar .move-warning{
+  background: #fff3cd; color: #856404;
+  padding: 10px; border-radius: 6px; font-size: 0.8rem;
+  margin-bottom: 12px; border-left: 3px solid #ffc107;
+  display: none;
+}
+#view-calendar .move-warning.visible{ display: block; }
+#view-calendar.dark .move-warning{ background: #3d3218; color: #ffd966; border-left-color: #ffc107; }
+#view-calendar .move-conflict{
+  background: #f8d7da; color: #721c24;
+  padding: 10px; border-radius: 6px; font-size: 0.8rem;
+  margin-bottom: 12px; border-left: 3px solid #dc3545;
+  display: none;
+}
+#view-calendar .move-conflict.visible{ display: block; }
+#view-calendar.dark .move-conflict{ background: #3d1a1e; color: #f5b7bd; border-left-color: #dc3545; }
 </style>
 
 <!-- ============================================================
-     СТИЛИ ТРЕКЕРА (изолированы в #view-finance)
+     СТИЛИ ТРЕКЕРА
      ============================================================ -->
 <style>
 #view-finance{
@@ -537,9 +593,7 @@ body{
 #view-finance .btn.ghost{background:transparent;color:var(--purple);border:1px solid var(--purple);}
 #view-finance .btn.ghost[disabled],
 #view-finance .btn.ghost.disabled{
-  opacity: 0.4;
-  cursor: not-allowed;
-  pointer-events: none;
+  opacity: 0.4;cursor: not-allowed;pointer-events: none;
 }
 #view-finance .btn.tiny{padding:4px 8px;font-size:11px;border-radius:6px;}
 
@@ -585,90 +639,61 @@ body{
 }
 #view-finance .divider-beyond::before{content:'⚠';font-size:12px;}
 
-/* === БЛОКИ АБОНЕМЕНТОВ === */
 #view-finance .subscription-block{
-  margin:8px 0;
-  border-radius:10px;
-  overflow:hidden;
-  border:1px solid var(--line);
-  background:#fff;
+  margin:8px 0;border-radius:10px;overflow:hidden;
+  border:1px solid var(--line);background:#fff;
   box-shadow:0 1px 3px rgba(80,40,110,.04);
 }
 #view-finance .subscription-header{
-  display:flex;
-  align-items:center;
-  gap:8px;
-  padding:8px 10px;
+  display:flex;align-items:center;gap:8px;padding:8px 10px;
   background:linear-gradient(90deg,rgba(80,159,84,.10),rgba(80,159,84,.02));
   border-bottom:1px solid rgba(80,159,84,.15);
-  font-size:11px;
-  font-weight:bold;
-  color:var(--green);
-  letter-spacing:.3px;
-  flex-wrap:wrap;
+  font-size:11px;font-weight:bold;color:var(--green);
+  letter-spacing:.3px;flex-wrap:wrap;
 }
 #view-finance .subscription-header .sub-icon{font-size:12px;}
 #view-finance .subscription-header .sub-label{
-  background:rgba(80,159,84,.18);
-  color:var(--green);
-  padding:1px 7px;
-  border-radius:20px;
-  font-size:10px;
-  letter-spacing:.3px;
+  background:rgba(80,159,84,.18);color:var(--green);
+  padding:1px 7px;border-radius:20px;font-size:10px;letter-spacing:.3px;
 }
 #view-finance .subscription-header .sub-count{
-  margin-left:auto;
-  background:rgba(123,80,159,.15);
-  color:var(--purple);
-  padding:1px 8px;
-  border-radius:20px;
-  font-size:10px;
-  font-weight:bold;
+  margin-left:auto;background:rgba(123,80,159,.15);color:var(--purple);
+  padding:1px 8px;border-radius:20px;font-size:10px;font-weight:bold;
 }
 #view-finance .subscription-header .sub-date{
-  font-size:10px;
-  color:var(--muted);
-  font-weight:normal;
+  font-size:10px;color:var(--muted);font-weight:normal;
 }
 #view-finance .subscription-block.sub-0 .subscription-header{
   background:linear-gradient(90deg,rgba(80,159,84,.12),rgba(80,159,84,.02));
-  border-bottom-color:rgba(80,159,84,.18);
-  color:var(--green);
+  border-bottom-color:rgba(80,159,84,.18);color:var(--green);
 }
 #view-finance .subscription-block.sub-1 .subscription-header{
   background:linear-gradient(90deg,rgba(123,80,159,.12),rgba(123,80,159,.02));
-  border-bottom-color:rgba(123,80,159,.18);
-  color:var(--purple);
+  border-bottom-color:rgba(123,80,159,.18);color:var(--purple);
 }
 #view-finance .subscription-block.sub-2 .subscription-header{
   background:linear-gradient(90deg,rgba(159,80,116,.12),rgba(159,80,116,.02));
-  border-bottom-color:rgba(159,80,116,.18);
-  color:var(--berry);
+  border-bottom-color:rgba(159,80,116,.18);color:var(--berry);
 }
 #view-finance .subscription-block.sub-3 .subscription-header{
   background:linear-gradient(90deg,rgba(230,126,34,.12),rgba(230,126,34,.02));
-  border-bottom-color:rgba(230,126,34,.18);
-  color:#e67e22;
+  border-bottom-color:rgba(230,126,34,.18);color:#e67e22;
 }
 #view-finance .subscription-block.sub-4 .subscription-header{
   background:linear-gradient(90deg,rgba(59,110,165,.12),rgba(59,110,165,.02));
-  border-bottom-color:rgba(59,110,165,.18);
-  color:#3b6ea5;
+  border-bottom-color:rgba(59,110,165,.18);color:#3b6ea5;
 }
 #view-finance .subscription-block .lesson-row:last-child{border-bottom:none;}
 
 #view-finance .subscription-beyond{
-  border:1px dashed #e67e22;
-  background:#fff8f0;
+  border:1px dashed #e67e22;background:#fff8f0;
 }
 #view-finance .subscription-beyond .subscription-header{
   background:linear-gradient(90deg,rgba(230,126,34,.15),rgba(230,126,34,.03));
-  border-bottom:1px dashed rgba(230,126,34,.3);
-  color:#e67e22;
+  border-bottom:1px dashed rgba(230,126,34,.3);color:#e67e22;
 }
 #view-finance .subscription-beyond .subscription-header .sub-label{
-  background:rgba(230,126,34,.18);
-  color:#e67e22;
+  background:rgba(230,126,34,.18);color:#e67e22;
 }
 
 #view-finance .lesson-row{
@@ -907,6 +932,7 @@ body{
     <div style="padding: 15px; border-top: 1px solid var(--border-color); display: flex; gap: 10px; flex-wrap: wrap;">
       <button class="btn btn-danger hidden" id="deleteOneBtn" style="flex: 1;">Удалить урок</button>
       <button class="btn btn-warning hidden" id="deleteSeriesBtn" style="flex: 1;">Удалить серию</button>
+      <button class="btn btn-secondary hidden" id="moveLessonBtn" style="flex: 1;">📅 Перенести</button>
       <button class="btn btn-primary" id="saveBtn" style="flex: 2;">Сохранить</button>
     </div>
   </div>
@@ -946,7 +972,8 @@ body{
       <button class="btn btn-primary" id="addFromDayBtn" style="width: 100%; margin-top: 15px;">+ Добавить урок</button>
     </div>
   </div>
-<!-- Модалка: экспорт за месяц -->
+
+  <!-- Модалка: экспорт за месяц -->
   <div class="modal-card" id="exportMonthCard">
     <div class="modal-header">
       <h2>Экспорт уроков</h2>
@@ -973,10 +1000,52 @@ body{
     </div>
   </div>
 
+  <!-- Модалка: перенос урока -->
+  <div class="modal-card" id="moveCard">
+    <div class="modal-header">
+      <h2>Перенести урок</h2>
+      <span class="close-btn" id="closeMove">&times;</span>
+    </div>
+    <div class="modal-body">
+      <div class="move-preview" id="movePreview">
+        <div class="mp-label">Ученик</div>
+        <div class="mp-value" id="moveStudentName">—</div>
+        <div class="mp-label">Сейчас</div>
+        <div class="mp-value" id="moveFromValue">—</div>
+        <div class="mp-arrow">↓</div>
+        <div class="mp-label">Станет</div>
+        <div class="mp-value" id="moveToValue">—</div>
+      </div>
+
+      <div class="move-warning" id="moveWarning">
+        ⚠️ Выберите новую дату и время
+      </div>
+      <div class="move-conflict" id="moveConflict">
+        🚫 Конфликт: на эту дату у этого ученика уже есть урок в это же время.
+      </div>
+
+      <div class="form-group">
+        <label>Новая дата</label>
+        <input type="date" id="moveDate">
+      </div>
+      <div class="form-group">
+        <label>Новое время</label>
+        <input type="time" id="moveTime">
+      </div>
+      <div class="form-group">
+        <label>Или введи вручную (ДД.ММ.ГГГГ ЧЧ:ММ)</label>
+        <input type="text" id="moveManual" placeholder="05.10.2026 18:30" autocomplete="off">
+      </div>
+    </div>
+    <div style="padding: 15px; border-top: 1px solid var(--border-color); display: flex; gap: 10px;">
+      <button class="btn btn-secondary" id="cancelMoveBtn" style="flex:1;">Отмена</button>
+      <button class="btn btn-primary" id="confirmMoveBtn" style="flex:2;">Перенести</button>
+    </div>
+  </div>
+
   <!-- Скрытый input для импорта -->
   <input type="file" id="importCalendarFile" accept=".json,application/json" style="display:none">
 
-  <!-- ⬆️⬆️⬆️ КОНЕЦ ВСТАВКИ ⬆️⬆️⬆️ -->
 </div><!-- /view-calendar -->
 
 <!-- ============================================================
@@ -985,7 +1054,7 @@ body{
 <div id="view-finance" class="app-view">
 
   <header>
-          <div class="header-top">
+    <div class="header-top">
       <h1>Трекер оплат репетитора Greens</h1>
       <div class="header-actions">
         <button class="btn ghost tiny" onclick="undoFinance()" id="undoFinanceBtn" title="Отменить последнее действие">↶ Отменить</button>
@@ -1035,10 +1104,8 @@ body{
 <!-- ============================================================
      JS КАЛЕНДАРЯ
      ============================================================ -->
-
 <script>
 (function(){
-  // === КОНФИГ ===
   const MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
   const DAYS_SHORT = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
   const now = new Date();
@@ -1053,7 +1120,6 @@ body{
   let currentSize = localStorage.getItem('tutorSize') || 'normal';
   let hideIndicator = localStorage.getItem('tutorHideIndicator') === 'true';
 
-  // === UNDO СТЕК ===
   const UNDO_LIMIT = 20;
   let undoStack = [];
 
@@ -1080,16 +1146,10 @@ body{
   }
 
   function performUndo(){
-    if(undoStack.length === 0){
-      alert('Нечего отменять — история пуста.');
-      return;
-    }
+    if(undoStack.length === 0){ alert('Нечего отменять — история пуста.'); return; }
     const last = undoStack.pop();
     const confirmMsg = `↶ Отменить последнее действие?\n\nЧто отменяется: ${last.label}\nКогда: ${new Date(last.time).toLocaleTimeString()}`;
-    if(!confirm(confirmMsg)){
-      undoStack.push(last);
-      return;
-    }
+    if(!confirm(confirmMsg)){ undoStack.push(last); return; }
     lessons = last.lessons;
     saveToStorage();
     renderCalendar();
@@ -1117,7 +1177,6 @@ body{
     return `url("data:image/svg+xml,${encoded}")`;
   }
 
-  // === SVG ФОНЫ (те же что были) ===
   const SVG_DOTS = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#f4f4f9"/><circle cx="20" cy="20" r="2" fill="#c8c8d0"/></svg>`;
   const SVG_GRID = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><rect width="40" height="40" fill="#fafafd"/><path d="M0 0 H40 M0 0 V40" stroke="#e0e0e8" stroke-width="1" fill="none"/></svg>`;
   const SVG_PAPER = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="40"><rect width="100" height="40" fill="#fdfdf9"/><line x1="0" y1="38" x2="100" y2="38" stroke="#d0d0d8" stroke-width="1"/></svg>`;
@@ -1254,15 +1313,31 @@ body{
   const exportAllBtn = document.getElementById('exportAllBtn');
   const exportMonthBtn = document.getElementById('exportMonthBtn');
 
+  const moveCard = document.getElementById('moveCard');
+  const closeMove = document.getElementById('closeMove');
+  const moveStudentName = document.getElementById('moveStudentName');
+  const moveFromValue = document.getElementById('moveFromValue');
+  const moveToValue = document.getElementById('moveToValue');
+  const moveWarning = document.getElementById('moveWarning');
+  const moveConflict = document.getElementById('moveConflict');
+  const moveDateInput = document.getElementById('moveDate');
+  const moveTimeInput = document.getElementById('moveTime');
+  const moveManualInput = document.getElementById('moveManual');
+  const cancelMoveBtn = document.getElementById('cancelMoveBtn');
+  const confirmMoveBtn = document.getElementById('confirmMoveBtn');
+  const moveLessonBtn = document.getElementById('moveLessonBtn');
+
   let editingId = null;
   let selectedDate = null;
   let selectedColor = '#4CAF50';
   let currentSeriesId = null;
   let dayDetailDate = null;
+  let moveLessonId = null;
+  let moveLessonDate = null;
+  let dragData = null;
 
   const COLORS = ['#4CAF50','#2196F3','#FF9800','#E91E63','#9C27B0','#00BCD4','#795548','#607D8B'];
 
-  // === ФОРМАТ ВРЕМЕНИ ===
   function formatTimeInput(raw){
     if(!raw) return '';
     let cleaned = raw.toString().replace(/[^0-9]/g,'');
@@ -1278,7 +1353,14 @@ body{
 
   function isValidTime(str){ return /^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(str); }
 
-  // === ИНИЦИАЛИЗАЦИЯ ===
+  function formatDateRu(iso){
+    if(!iso) return '';
+    const [y, m, d] = iso.split('-');
+    const dt = new Date(iso + 'T00:00:00');
+    const wd = DAYS_SHORT[(dt.getDay()+6)%7];
+    return `${d}.${m}.${y} (${wd})`;
+  }
+
   function populateMonthSelect(){
     monthSelect.innerHTML = '';
     for(let y = MIN_YEAR; y <= MAX_YEAR; y++){
@@ -1294,7 +1376,6 @@ body{
 
   function populateExportMonthSelect(){
     exportMonthSelect.innerHTML = '';
-    // Показываем последние 12 месяцев + текущий + 3 вперёд
     const nowDate = new Date();
     for(let offset = 12; offset >= -3; offset--){
       const d = new Date(nowDate.getFullYear(), nowDate.getMonth() - offset, 1);
@@ -1390,7 +1471,6 @@ body{
     });
   }
 
-  // === СОЗДАНИЕ СЛОТА ===
   function createSlotElement(initialDay = null, initialTime = '', removable = true){
     const slot = document.createElement('div');
     slot.className = 'schedule-slot';
@@ -1585,6 +1665,9 @@ body{
         if(hasContent) card.classList.add('has-content');
         card.style.backgroundColor = lesson.color + '30';
         card.style.borderLeftColor = lesson.color;
+        card.draggable = true;
+        card.dataset.lessonId = lesson.id;
+        card.dataset.lessonDate = dateStr;
         const emojiPart = lesson.emoji ? `<span class="card-emoji">${lesson.emoji}</span>` : '';
         card.innerHTML = `
           <div class="card-header" style="color: ${lesson.color}">
@@ -1594,6 +1677,20 @@ body{
           <div class="card-sub">${lesson.time || '--:--'}</div>
         `;
         card.onclick = (e) => { e.stopPropagation(); openModal(lesson, dateStr); };
+
+        card.addEventListener('dragstart', (e) => {
+          e.stopPropagation();
+          dragData = { lessonId: lesson.id, fromDate: dateStr };
+          card.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', lesson.id);
+        });
+        card.addEventListener('dragend', () => {
+          card.classList.remove('dragging');
+          document.querySelectorAll('#view-calendar .day-cell.drag-over').forEach(c => c.classList.remove('drag-over'));
+          dragData = null;
+        });
+
         cell.appendChild(card);
       });
 
@@ -1602,6 +1699,48 @@ body{
         if(e.detail === 2 || dayLessons.length > 2) openDayDetail(dateStr, day);
         else openModal(null, dateStr);
       };
+
+      cell.addEventListener('dragover', (e) => {
+        if(!dragData) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        cell.classList.add('drag-over', 'drag-target');
+      });
+      cell.addEventListener('dragleave', (e) => {
+        if(e.target === cell){
+          cell.classList.remove('drag-over', 'drag-target');
+        }
+      });
+      cell.addEventListener('drop', (e) => {
+        e.preventDefault();
+        cell.classList.remove('drag-over', 'drag-target');
+        if(!dragData) return;
+
+        const targetDate = dateStr;
+        if(targetDate === dragData.fromDate) return;
+
+        const lesson = lessons.find(l => l.id === dragData.lessonId);
+        if(!lesson) return;
+
+        const conflict = lessons.some(l =>
+          l.id !== lesson.id &&
+          l.date === targetDate &&
+          l.name === lesson.name &&
+          l.time === lesson.time
+        );
+
+        if(conflict){
+          alert(`🚫 Конфликт: у «${lesson.name}» уже есть урок на ${formatDateRu(targetDate)} в ${lesson.time}. Перенос отменён.`);
+          return;
+        }
+
+        pushUndo(`Перенос урока «${lesson.name}» с ${formatDateRu(dragData.fromDate)} на ${formatDateRu(targetDate)}`);
+        lesson.date = targetDate;
+        lesson.seriesId = null;
+        saveToStorage();
+        renderCalendar();
+      });
+
       grid.appendChild(cell);
     }
   }
@@ -1660,6 +1799,7 @@ body{
       deleteOneBtn.classList.remove('hidden');
       if(lesson.seriesId) deleteSeriesBtn.classList.remove('hidden');
       else deleteSeriesBtn.classList.add('hidden');
+      moveLessonBtn.classList.remove('hidden');
     } else {
       editingId = null; currentSeriesId = null;
       document.getElementById('modalTitle').textContent = 'Новый ученик';
@@ -1681,6 +1821,7 @@ body{
       extendMonthsCheckbox.checked = false;
       deleteOneBtn.classList.add('hidden');
       deleteSeriesBtn.classList.add('hidden');
+      moveLessonBtn.classList.add('hidden');
     }
     document.querySelectorAll('#view-calendar .tab-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('#view-calendar .tab-content').forEach(content => content.classList.remove('active'));
@@ -1696,6 +1837,7 @@ body{
     settingsCard.classList.remove('active');
     dayDetailCard.classList.remove('active');
     if(exportMonthCard) exportMonthCard.classList.remove('active');
+    if(moveCard) moveCard.classList.remove('active');
     overlay.classList.remove('active');
   }
 
@@ -1712,7 +1854,6 @@ body{
     });
   }
 
-  // === СОХРАНЕНИЕ УРОКА ===
   saveBtn.onclick = () => {
     const name = document.getElementById('studentName').value.trim();
     if(!name){ alert('Введите имя ученика'); return; }
@@ -1737,7 +1878,6 @@ body{
       let createdAny = false;
       let totalCreated = 0;
 
-      // Сначала подготовим все данные
       const previewData = slots.map(slot => slot.getData()).filter(d => d.days.length > 0 && d.time);
 
       if(previewData.length === 0){
@@ -1892,12 +2032,8 @@ body{
   if(closeExportMonth) closeExportMonth.onclick = closeModals;
   overlay.onclick = closeModals;
 
-  // === UNDO КНОПКА ===
-  undoBtn.onclick = () => {
-    performUndo();
-  };
+  undoBtn.onclick = () => { performUndo(); };
 
-  // === ЭКСПОРТ ===
   exportBtn.onclick = () => {
     populateExportMonthSelect();
     exportMonthCard.classList.add('active');
@@ -1906,14 +2042,7 @@ body{
 
   exportAllBtn.onclick = () => {
     if(lessons.length === 0){ alert('Нет уроков для экспорта.'); return; }
-    const payload = {
-      app: 'tutor-calendar',
-      version: 1,
-      scope: 'all',
-      exportedAt: new Date().toISOString(),
-      count: lessons.length,
-      lessons: lessons
-    };
+    const payload = { app: 'tutor-calendar', version: 1, scope: 'all', exportedAt: new Date().toISOString(), count: lessons.length, lessons: lessons };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const d = new Date();
@@ -1926,7 +2055,7 @@ body{
   };
 
   exportMonthBtn.onclick = () => {
-    const val = exportMonthSelect.value; // "YYYY-MM"
+    const val = exportMonthSelect.value;
     if(!val) return;
     const [y, m] = val.split('-').map(Number);
     const monthStr = `${y}-${String(m).padStart(2,'0')}`;
@@ -1935,15 +2064,7 @@ body{
       alert(`За ${MONTHS[m-1].toLowerCase()} ${y} нет уроков для экспорта.`);
       return;
     }
-    const payload = {
-      app: 'tutor-calendar',
-      version: 1,
-      scope: 'month',
-      month: monthStr,
-      exportedAt: new Date().toISOString(),
-      count: monthLessons.length,
-      lessons: monthLessons
-    };
+    const payload = { app: 'tutor-calendar', version: 1, scope: 'month', month: monthStr, exportedAt: new Date().toISOString(), count: monthLessons.length, lessons: monthLessons };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1953,10 +2074,7 @@ body{
     closeModals();
   };
 
-  // === ИМПОРТ ===
-  importBtn.onclick = () => {
-    importCalendarFile.click();
-  };
+  importBtn.onclick = () => { importCalendarFile.click(); };
 
   importCalendarFile.onchange = (event) => {
     const file = event.target.files && event.target.files[0];
@@ -1981,51 +2099,32 @@ body{
         pushUndo(`Импорт уроков (${incoming.length} шт.)`);
 
         if(choice){
-          // Объединение: добавляем только те, у которых нет совпадения по (date + name + time)
           let added = 0, skipped = 0;
           incoming.forEach(inc => {
             const exists = lessons.some(l => l.date === inc.date && l.name === inc.name && l.time === inc.time);
             if(exists){ skipped++; return; }
-            // Убедимся, что есть id и seriesId
             lessons.push({
               id: inc.id || (Date.now().toString() + Math.random().toString(36).substr(2,5)),
               seriesId: inc.seriesId || null,
-              date: inc.date,
-              time: inc.time || '',
-              name: inc.name || '',
-              plan: inc.plan || '',
-              homeworkGiven: inc.homeworkGiven || '',
-              homeworkLink: inc.homeworkLink || '',
-              homeworkNext: inc.homeworkNext || '',
-              link: inc.link || '',
-              color: inc.color || '#4CAF50',
-              emoji: inc.emoji || ''
+              date: inc.date, time: inc.time || '', name: inc.name || '',
+              plan: inc.plan || '', homeworkGiven: inc.homeworkGiven || '',
+              homeworkLink: inc.homeworkLink || '', homeworkNext: inc.homeworkNext || '',
+              link: inc.link || '', color: inc.color || '#4CAF50', emoji: inc.emoji || ''
             });
             added++;
           });
-          saveToStorage();
-          renderCalendar();
-          closeModals();
+          saveToStorage(); renderCalendar(); closeModals();
           alert(`✅ Готово!\n\nДобавлено: ${added}\nПропущено (уже есть): ${skipped}`);
         } else {
-          // Замена
           lessons = incoming.map(inc => ({
             id: inc.id || (Date.now().toString() + Math.random().toString(36).substr(2,5)),
             seriesId: inc.seriesId || null,
-            date: inc.date,
-            time: inc.time || '',
-            name: inc.name || '',
-            plan: inc.plan || '',
-            homeworkGiven: inc.homeworkGiven || '',
-            homeworkLink: inc.homeworkLink || '',
-            homeworkNext: inc.homeworkNext || '',
-            link: inc.link || '',
-            color: inc.color || '#4CAF50',
-            emoji: inc.emoji || ''
+            date: inc.date, time: inc.time || '', name: inc.name || '',
+            plan: inc.plan || '', homeworkGiven: inc.homeworkGiven || '',
+            homeworkLink: inc.homeworkLink || '', homeworkNext: inc.homeworkNext || '',
+            link: inc.link || '', color: inc.color || '#4CAF50', emoji: inc.emoji || ''
           }));
-          saveToStorage();
-          renderCalendar();
-          closeModals();
+          saveToStorage(); renderCalendar(); closeModals();
           alert(`✅ Заменено! Загружено ${lessons.length} урок(ов).`);
         }
       } catch(err){
@@ -2035,6 +2134,125 @@ body{
       event.target.value = '';
     };
     reader.readAsText(file);
+  };
+
+  // === МОДАЛКА ПЕРЕНОСА УРОКА ===
+  function openMoveModal(lesson){
+    moveLessonId = lesson.id;
+    moveLessonDate = lesson.date;
+
+    moveStudentName.textContent = lesson.name + (lesson.emoji ? ' ' + lesson.emoji : '');
+    moveFromValue.textContent = formatDateRu(lesson.date) + ', ' + (lesson.time || '--:--');
+    moveToValue.textContent = '—';
+    moveDateInput.value = lesson.date;
+    moveTimeInput.value = lesson.time || '';
+    moveManualInput.value = '';
+    moveWarning.classList.remove('visible');
+    moveConflict.classList.remove('visible');
+    moveCard.classList.add('active');
+    overlay.classList.add('active');
+  }
+
+  function closeMoveModal(){
+    moveCard.classList.remove('active');
+    overlay.classList.remove('active');
+    moveLessonId = null;
+    moveLessonDate = null;
+  }
+
+  function updateMovePreview(){
+    const date = moveDateInput.value;
+    const time = moveTimeInput.value;
+    if(date && time){
+      moveToValue.textContent = formatDateRu(date) + ', ' + time;
+    } else {
+      moveToValue.textContent = '—';
+    }
+    moveConflict.classList.remove('visible');
+    moveWarning.classList.remove('visible');
+  }
+
+  moveDateInput.addEventListener('change', updateMovePreview);
+  moveTimeInput.addEventListener('change', updateMovePreview);
+
+  moveManualInput.addEventListener('input', (e) => {
+    let val = e.target.value.trim();
+    const fullMatch = val.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})\s+(\d{1,2})[:\-](\d{2})$/);
+    const dateOnly = val.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
+
+    if(fullMatch){
+      const d = parseInt(fullMatch[1]);
+      const m = parseInt(fullMatch[2]);
+      const y = parseInt(fullMatch[3]);
+      const hh = parseInt(fullMatch[4]);
+      const mm = parseInt(fullMatch[5]);
+      if(d >= 1 && d <= 31 && m >= 1 && m <= 12 && hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59){
+        moveDateInput.value = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        moveTimeInput.value = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+        updateMovePreview();
+        moveManualInput.style.borderColor = 'var(--primary)';
+      } else {
+        moveManualInput.style.borderColor = '';
+      }
+    } else if(dateOnly){
+      const d = parseInt(dateOnly[1]);
+      const m = parseInt(dateOnly[2]);
+      const y = parseInt(dateOnly[3]);
+      if(d >= 1 && d <= 31 && m >= 1 && m <= 12){
+        moveDateInput.value = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+        updateMovePreview();
+        moveManualInput.style.borderColor = 'var(--primary)';
+      } else {
+        moveManualInput.style.borderColor = '';
+      }
+    } else {
+      moveManualInput.style.borderColor = '';
+    }
+  });
+
+  moveLessonBtn.onclick = () => {
+    if(!editingId) return;
+    const lesson = lessons.find(l => l.id === editingId);
+    if(!lesson) return;
+    modal.classList.remove('active');
+    openMoveModal(lesson);
+  };
+
+  cancelMoveBtn.onclick = () => { closeMoveModal(); };
+  closeMove.onclick = () => { closeMoveModal(); };
+
+  confirmMoveBtn.onclick = () => {
+    if(!moveLessonId) return;
+    const lesson = lessons.find(l => l.id === moveLessonId);
+    if(!lesson) return;
+
+    const newDate = moveDateInput.value;
+    const newTime = moveTimeInput.value;
+
+    if(!newDate || !newTime){
+      moveWarning.classList.add('visible');
+      return;
+    }
+
+    const conflict = lessons.some(l =>
+      l.id !== lesson.id &&
+      l.date === newDate &&
+      l.name === lesson.name &&
+      l.time === newTime
+    );
+
+    if(conflict){
+      moveConflict.classList.add('visible');
+      return;
+    }
+
+    pushUndo(`Перенос урока «${lesson.name}» с ${formatDateRu(lesson.date)} на ${formatDateRu(newDate)}`);
+    lesson.date = newDate;
+    lesson.time = newTime;
+    lesson.seriesId = null;
+    saveToStorage();
+    renderCalendar();
+    closeMoveModal();
   };
 
   // === ЗАПУСК ===
@@ -2047,9 +2265,6 @@ body{
   renderCalendar();
   updateUndoBtn();
 })();
-
-
-
 </script>
 
 <!-- ============================================================
@@ -2064,7 +2279,6 @@ body{
   let editingNoteId = null;
   let activeFormat = {bold:false, italic:false, underline:false, color:'#2b2430'};
 
-// === UNDO СТЕК (трекер) ===
   const UNDO_LIMIT = 20;
   let undoStack = [];
 
@@ -2092,25 +2306,15 @@ body{
   }
 
   window.undoFinance = function(){
-    if(undoStack.length === 0){
-      alert('Нечего отменять — история пуста.');
-      return;
-    }
+    if(undoStack.length === 0){ alert('Нечего отменять — история пуста.'); return; }
     const last = undoStack.pop();
     const confirmMsg = `↶ Отменить последнее действие?\n\nЧто отменяется: ${last.label}\nКогда: ${new Date(last.time).toLocaleTimeString()}`;
-    if(!confirm(confirmMsg)){
-      undoStack.push(last);
-      return;
-    }
+    if(!confirm(confirmMsg)){ undoStack.push(last); return; }
     state.students = last.students;
     state.notes = last.notes;
     editingNoteId = null;
-    save();
-    render();
-    renderDays();
-    updateUndoFinanceBtn();
+    save(); render(); renderDays(); updateUndoFinanceBtn();
   };
-
 
   function load(){
     try{
@@ -2165,7 +2369,7 @@ body{
     const rate = parseFloat(document.getElementById('sRate').value) || 0;
     if(!name){ alert('Введите имя ученика'); return; }
     if(state.selectedDays.length === 0){ alert('Выберите хотя бы один день занятий'); return; }
-	pushUndo(`Добавление ученика «${name}»`);
+    pushUndo(`Добавление ученика «${name}»`);
     state.students.push({
       id: uid(), name, rate,
       days: [...state.selectedDays],
@@ -2200,7 +2404,7 @@ body{
     const startDate = startInput.value;
     if(!lessons || lessons<=0){ alert('Укажите количество уроков в абонементе'); return; }
     if(!startDate){ alert('Укажите дату начала абонемента'); return; }
-	    pushUndo(`Абонемент «${s.name}» — ${lessons} урок(ов)`);
+    pushUndo(`Абонемент «${s.name}» — ${lessons} урок(ов)`);
     const amount = s.rate * lessons;
     s.payments.push({ id:uid(), date: todayISO(), lessons, amount, startDate });
     if(!s.scheduleStart || startDate < s.scheduleStart){ s.scheduleStart = startDate; }
@@ -2254,7 +2458,7 @@ body{
     student.balance = Math.max(0, totalPaid - doneCount);
   }
 
-   window.setLessonStatus = function(sid, lid, status){
+  window.setLessonStatus = function(sid, lid, status){
     const s = state.students.find(x=>x.id===sid);
     const l = s.lessons.find(x=>x.id===lid);
     if(!l) return;
@@ -2307,7 +2511,6 @@ body{
       } else if(s.lessons.length === 0){
         lessonsHTML = '<div class="empty">Нет уроков</div>';
       } else {
-        // Группируем уроки по абонементам
         const totalLessons = s.lessons.length;
         const sortedPayments = [...s.payments].sort((a,b) => (a.startDate||'').localeCompare(b.startDate||''));
         let cursor = 0;
@@ -2473,7 +2676,7 @@ body{
   const NOTE_COLORS = ['#fef7c3','#d8f5d9','#e6dcf5','#f9dbe6','#d9eefb'];
 
   window.addNote = function(){
-pushUndo('Создание заметки');
+    pushUndo('Создание заметки');
     const n = { id: uid(), text: '', color: NOTE_COLORS[Math.floor(Math.random()*NOTE_COLORS.length)], bold:false, italic:false, underline:false, textColor:'#2b2430', editing:true };
     state.notes.unshift(n);
     editingNoteId = n.id;
@@ -2483,14 +2686,13 @@ pushUndo('Создание заметки');
     if(ta) ta.focus();
   };
 
-    window.deleteNote = function(id){
+  window.deleteNote = function(id){
     const n = state.notes.find(x=>x.id===id);
     pushUndo(`Удаление заметки${n && n.text ? ' «' + n.text.substring(0,20) + '...»' : ''}`);
     state.notes = state.notes.filter(n=>n.id!==id);
     if(editingNoteId===id) editingNoteId = null;
     save(); renderNotes();
   };
-
 
   window.editNote = function(id){
     editingNoteId = id;
@@ -2617,7 +2819,7 @@ pushUndo('Создание заметки');
         if(!data || typeof data !== 'object'){ alert('Файл повреждён.'); return; }
         if(!Array.isArray(data.students) || !Array.isArray(data.notes)){ alert('Это не файл резервной копии.'); return; }
         const ok = confirm(`Импортировать?\n\nУчеников: ${data.students.length}\nЗаметок: ${data.notes.length}\n\n⚠ Текущие данные будут заменены.`);
-         if(!ok){ event.target.value=''; return; }
+        if(!ok){ event.target.value=''; return; }
         pushUndo(`Импорт данных (${data.students.length} учеников, ${data.notes.length} заметок)`);
         state.students = data.students; state.notes = data.notes;
         state.collapsed = state.collapsed || {};
@@ -2629,14 +2831,14 @@ pushUndo('Создание заметки');
     };
     reader.readAsText(file);
   };
-load();
+
+  load();
   renderDays();
   render();
   updateClock();
   updateUndoFinanceBtn();
   setInterval(() => { updateClock(); render(); }, 30000);
 })();
-
 </script>
 
 <!-- ============================================================
@@ -2644,7 +2846,6 @@ load();
      ============================================================ -->
 <script>
 (function(){
-  // === Переключение вкладок ===
   window.switchTab = function(tab){
     document.querySelectorAll('.app-view').forEach(v => v.classList.remove('active'));
     document.querySelectorAll('.app-tab').forEach(t => t.classList.remove('active'));
@@ -2661,11 +2862,9 @@ load();
     window.scrollTo(0, 0);
   };
 
-  // Восстановить активную вкладку при загрузке
   const savedTab = localStorage.getItem('tutorActiveTab') || 'calendar';
   window.switchTab(savedTab);
 
-  // === Регистрация Service Worker ===
   if('serviceWorker' in navigator){
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js', { scope: './' })
