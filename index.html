@@ -535,6 +535,12 @@ body{
 #view-finance .btn.purple{background:var(--purple);}
 #view-finance .btn.berry{background:var(--berry);}
 #view-finance .btn.ghost{background:transparent;color:var(--purple);border:1px solid var(--purple);}
+#view-finance .btn.ghost[disabled],
+#view-finance .btn.ghost.disabled{
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 #view-finance .btn.tiny{padding:4px 8px;font-size:11px;border-radius:6px;}
 
 #view-finance .student-card{
@@ -893,9 +899,10 @@ body{
 <div id="view-finance" class="app-view">
 
   <header>
-    <div class="header-top">
+          <div class="header-top">
       <h1>Трекер оплат репетитора Greens</h1>
       <div class="header-actions">
+        <button class="btn ghost tiny" onclick="undoFinance()" id="undoFinanceBtn" title="Отменить последнее действие">↶ Отменить</button>
         <button class="btn ghost tiny" onclick="exportData()">⬇ Export</button>
         <button class="btn ghost tiny" onclick="importData()">⬆ Import</button>
         <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="handleImportFile(event)">
@@ -1971,6 +1978,54 @@ body{
   let editingNoteId = null;
   let activeFormat = {bold:false, italic:false, underline:false, color:'#2b2430'};
 
+// === UNDO СТЕК (трекер) ===
+  const UNDO_LIMIT = 20;
+  let undoStack = [];
+
+  function pushUndo(label){
+    undoStack.push({
+      students: JSON.parse(JSON.stringify(state.students)),
+      notes: JSON.parse(JSON.stringify(state.notes)),
+      label,
+      time: Date.now()
+    });
+    if(undoStack.length > UNDO_LIMIT) undoStack.shift();
+    updateUndoFinanceBtn();
+  }
+
+  function updateUndoFinanceBtn(){
+    const btn = document.getElementById('undoFinanceBtn');
+    if(!btn) return;
+    if(undoStack.length === 0){
+      btn.classList.add('disabled');
+      btn.setAttribute('disabled', 'true');
+    } else {
+      btn.classList.remove('disabled');
+      btn.removeAttribute('disabled');
+    }
+  }
+
+  window.undoFinance = function(){
+    if(undoStack.length === 0){
+      alert('Нечего отменять — история пуста.');
+      return;
+    }
+    const last = undoStack.pop();
+    const confirmMsg = `↶ Отменить последнее действие?\n\nЧто отменяется: ${last.label}\nКогда: ${new Date(last.time).toLocaleTimeString()}`;
+    if(!confirm(confirmMsg)){
+      undoStack.push(last);
+      return;
+    }
+    state.students = last.students;
+    state.notes = last.notes;
+    editingNoteId = null;
+    save();
+    render();
+    renderDays();
+    updateUndoFinanceBtn();
+  };
+
+
   function load(){
     try{
       const s = localStorage.getItem('tutor_mvp_state_v5');
@@ -2024,6 +2079,7 @@ body{
     const rate = parseFloat(document.getElementById('sRate').value) || 0;
     if(!name){ alert('Введите имя ученика'); return; }
     if(state.selectedDays.length === 0){ alert('Выберите хотя бы один день занятий'); return; }
+	pushUndo(`Добавление ученика «${name}»`);
     state.students.push({
       id: uid(), name, rate,
       days: [...state.selectedDays],
@@ -2038,6 +2094,8 @@ body{
 
   window.deleteStudent = function(id){
     if(!confirm('Удалить ученика и всю его историю?')) return;
+    const st = state.students.find(x=>x.id===id);
+    pushUndo(`Удаление ученика${st ? ' «' + st.name + '»' : ''}`);
     state.students = state.students.filter(s=>s.id!==id);
     delete state.collapsed[id];
     save(); render();
@@ -2056,6 +2114,7 @@ body{
     const startDate = startInput.value;
     if(!lessons || lessons<=0){ alert('Укажите количество уроков в абонементе'); return; }
     if(!startDate){ alert('Укажите дату начала абонемента'); return; }
+	    pushUndo(`Абонемент «${s.name}» — ${lessons} урок(ов)`);
     const amount = s.rate * lessons;
     s.payments.push({ id:uid(), date: todayISO(), lessons, amount, startDate });
     if(!s.scheduleStart || startDate < s.scheduleStart){ s.scheduleStart = startDate; }
@@ -2109,10 +2168,11 @@ body{
     student.balance = Math.max(0, totalPaid - doneCount);
   }
 
-  window.setLessonStatus = function(sid, lid, status){
+   window.setLessonStatus = function(sid, lid, status){
     const s = state.students.find(x=>x.id===sid);
     const l = s.lessons.find(x=>x.id===lid);
     if(!l) return;
+    pushUndo(`Смена статуса «${s.name}» — ${l.date}`);
     l.status = status;
     if(status === 'free-move' || status === 'paid-move'){
       const nd = prompt('На какую дату переносим? (ГГГГ-ММ-ДД)', l.date);
@@ -2285,6 +2345,7 @@ body{
   const NOTE_COLORS = ['#fef7c3','#d8f5d9','#e6dcf5','#f9dbe6','#d9eefb'];
 
   window.addNote = function(){
+pushUndo('Создание заметки');
     const n = { id: uid(), text: '', color: NOTE_COLORS[Math.floor(Math.random()*NOTE_COLORS.length)], bold:false, italic:false, underline:false, textColor:'#2b2430', editing:true };
     state.notes.unshift(n);
     editingNoteId = n.id;
@@ -2294,11 +2355,14 @@ body{
     if(ta) ta.focus();
   };
 
-  window.deleteNote = function(id){
+    window.deleteNote = function(id){
+    const n = state.notes.find(x=>x.id===id);
+    pushUndo(`Удаление заметки${n && n.text ? ' «' + n.text.substring(0,20) + '...»' : ''}`);
     state.notes = state.notes.filter(n=>n.id!==id);
     if(editingNoteId===id) editingNoteId = null;
     save(); renderNotes();
   };
+
 
   window.editNote = function(id){
     editingNoteId = id;
@@ -2425,7 +2489,8 @@ body{
         if(!data || typeof data !== 'object'){ alert('Файл повреждён.'); return; }
         if(!Array.isArray(data.students) || !Array.isArray(data.notes)){ alert('Это не файл резервной копии.'); return; }
         const ok = confirm(`Импортировать?\n\nУчеников: ${data.students.length}\nЗаметок: ${data.notes.length}\n\n⚠ Текущие данные будут заменены.`);
-        if(!ok){ event.target.value=''; return; }
+         if(!ok){ event.target.value=''; return; }
+        pushUndo(`Импорт данных (${data.students.length} учеников, ${data.notes.length} заметок)`);
         state.students = data.students; state.notes = data.notes;
         state.collapsed = state.collapsed || {};
         editingNoteId = null;
@@ -2436,13 +2501,14 @@ body{
     };
     reader.readAsText(file);
   };
-
-  load();
+load();
   renderDays();
   render();
   updateClock();
+  updateUndoFinanceBtn();
   setInterval(() => { updateClock(); render(); }, 30000);
 })();
+
 </script>
 
 <!-- ============================================================
