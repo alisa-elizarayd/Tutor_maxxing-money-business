@@ -2264,6 +2264,23 @@ body{
   renderEmojiPicker();
   renderCalendar();
   updateUndoBtn();
+// === АВТОСОХРАНЕНИЕ (для iOS Safari) ===
+  // Сохраняем при закрытии / перезагрузке страницы
+  window.addEventListener('beforeunload', () => {
+    saveToStorage();
+  });
+
+  // Сохраняем при сворачивании браузера (критично для iOS!)
+  document.addEventListener('visibilitychange', () => {
+    if(document.hidden){
+      saveToStorage();
+    }
+  });
+
+  // Автосохранение каждые 30 секунд
+  setInterval(() => {
+    saveToStorage();
+  }, 30000);
 })();
 </script>
 
@@ -2838,6 +2855,20 @@ body{
   updateClock();
   updateUndoFinanceBtn();
   setInterval(() => { updateClock(); render(); }, 30000);
+// === АВТОСОХРАНЕНИЕ (для iOS Safari) ===
+  window.addEventListener('beforeunload', () => {
+    save();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if(document.hidden){
+      save();
+    }
+  });
+
+  setInterval(() => {
+    save();
+  }, 30000);
 })();
 </script>
 
