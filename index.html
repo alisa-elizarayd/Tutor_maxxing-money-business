@@ -585,6 +585,92 @@ body{
 }
 #view-finance .divider-beyond::before{content:'⚠';font-size:12px;}
 
+/* === БЛОКИ АБОНЕМЕНТОВ === */
+#view-finance .subscription-block{
+  margin:8px 0;
+  border-radius:10px;
+  overflow:hidden;
+  border:1px solid var(--line);
+  background:#fff;
+  box-shadow:0 1px 3px rgba(80,40,110,.04);
+}
+#view-finance .subscription-header{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 10px;
+  background:linear-gradient(90deg,rgba(80,159,84,.10),rgba(80,159,84,.02));
+  border-bottom:1px solid rgba(80,159,84,.15);
+  font-size:11px;
+  font-weight:bold;
+  color:var(--green);
+  letter-spacing:.3px;
+  flex-wrap:wrap;
+}
+#view-finance .subscription-header .sub-icon{font-size:12px;}
+#view-finance .subscription-header .sub-label{
+  background:rgba(80,159,84,.18);
+  color:var(--green);
+  padding:1px 7px;
+  border-radius:20px;
+  font-size:10px;
+  letter-spacing:.3px;
+}
+#view-finance .subscription-header .sub-count{
+  margin-left:auto;
+  background:rgba(123,80,159,.15);
+  color:var(--purple);
+  padding:1px 8px;
+  border-radius:20px;
+  font-size:10px;
+  font-weight:bold;
+}
+#view-finance .subscription-header .sub-date{
+  font-size:10px;
+  color:var(--muted);
+  font-weight:normal;
+}
+#view-finance .subscription-block.sub-0 .subscription-header{
+  background:linear-gradient(90deg,rgba(80,159,84,.12),rgba(80,159,84,.02));
+  border-bottom-color:rgba(80,159,84,.18);
+  color:var(--green);
+}
+#view-finance .subscription-block.sub-1 .subscription-header{
+  background:linear-gradient(90deg,rgba(123,80,159,.12),rgba(123,80,159,.02));
+  border-bottom-color:rgba(123,80,159,.18);
+  color:var(--purple);
+}
+#view-finance .subscription-block.sub-2 .subscription-header{
+  background:linear-gradient(90deg,rgba(159,80,116,.12),rgba(159,80,116,.02));
+  border-bottom-color:rgba(159,80,116,.18);
+  color:var(--berry);
+}
+#view-finance .subscription-block.sub-3 .subscription-header{
+  background:linear-gradient(90deg,rgba(230,126,34,.12),rgba(230,126,34,.02));
+  border-bottom-color:rgba(230,126,34,.18);
+  color:#e67e22;
+}
+#view-finance .subscription-block.sub-4 .subscription-header{
+  background:linear-gradient(90deg,rgba(59,110,165,.12),rgba(59,110,165,.02));
+  border-bottom-color:rgba(59,110,165,.18);
+  color:#3b6ea5;
+}
+#view-finance .subscription-block .lesson-row:last-child{border-bottom:none;}
+
+#view-finance .subscription-beyond{
+  border:1px dashed #e67e22;
+  background:#fff8f0;
+}
+#view-finance .subscription-beyond .subscription-header{
+  background:linear-gradient(90deg,rgba(230,126,34,.15),rgba(230,126,34,.03));
+  border-bottom:1px dashed rgba(230,126,34,.3);
+  color:#e67e22;
+}
+#view-finance .subscription-beyond .subscription-header .sub-label{
+  background:rgba(230,126,34,.18);
+  color:#e67e22;
+}
+
 #view-finance .lesson-row{
   display:flex;justify-content:space-between;align-items:center;
   padding:7px 10px;border-bottom:1px solid #f0ecf4;gap:8px;flex-wrap:wrap;
@@ -2221,13 +2307,55 @@ body{
       } else if(s.lessons.length === 0){
         lessonsHTML = '<div class="empty">Нет уроков</div>';
       } else {
-        let dividerInserted = false;
-        s.lessons.forEach(l => {
-          if(!dividerInserted && l.status === 'beyond'){
-            lessonsHTML += `<div class="divider-beyond">сверх абонемента — не оплачено</div>`;
-            dividerInserted = true;
+        // Группируем уроки по абонементам
+        const totalLessons = s.lessons.length;
+        const sortedPayments = [...s.payments].sort((a,b) => (a.startDate||'').localeCompare(b.startDate||''));
+        let cursor = 0;
+        const blocks = [];
+        sortedPayments.forEach((p, idx) => {
+          const count = p.lessons;
+          const blockLessons = s.lessons.slice(cursor, cursor + count);
+          if(blockLessons.length > 0){
+            blocks.push({ type: 'subscription', index: idx, payment: p, lessons: blockLessons });
           }
-          lessonsHTML += lessonHTML(s.id, l, today);
+          cursor += count;
+        });
+        if(cursor < totalLessons){
+          const beyondLessons = s.lessons.slice(cursor);
+          if(beyondLessons.length > 0){
+            blocks.push({ type: 'beyond', lessons: beyondLessons });
+          }
+        }
+        if(blocks.length === 0){
+          blocks.push({ type: 'beyond', lessons: s.lessons });
+        }
+        blocks.forEach(block => {
+          if(block.type === 'subscription'){
+            const p = block.payment;
+            const subIdx = block.index % 5;
+            lessonsHTML += `
+              <div class="subscription-block sub-${subIdx}">
+                <div class="subscription-header">
+                  <span class="sub-icon">💳</span>
+                  <span class="sub-label">Абонемент #${block.index + 1}</span>
+                  <span class="sub-date">от ${fmtDate(p.startDate || p.date)}</span>
+                  <span class="sub-count">${block.lessons.length} / ${p.lessons} ур.</span>
+                </div>
+                ${block.lessons.map(l => lessonHTML(s.id, l, today)).join('')}
+              </div>
+            `;
+          } else if(block.type === 'beyond'){
+            lessonsHTML += `
+              <div class="subscription-block subscription-beyond">
+                <div class="subscription-header">
+                  <span class="sub-icon">⚠</span>
+                  <span class="sub-label">Сверх абонемента — не оплачено</span>
+                  <span class="sub-count">${block.lessons.length} ур.</span>
+                </div>
+                ${block.lessons.map(l => lessonHTML(s.id, l, today)).join('')}
+              </div>
+            `;
+          }
         });
       }
       card.innerHTML = `
