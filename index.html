@@ -776,7 +776,7 @@ body{
   #view-finance .mission{padding:12px 14px;font-size:11px;gap:10px;}
   #view-finance .mission span{font-size:11px;}
   #view-finance .layout{padding:14px;gap:14px;}
-  #view-finance .lessons{max-height:440px;}
+  #view-finance .lessons{max-height:70vh;min-height:500px;}
   #view-finance .panel{padding:14px;}
 
   #view-finance .student-form{grid-template-columns:1fr 1fr;gap:7px;}
@@ -2641,9 +2641,14 @@ body{
   function render(){
     const preservedScrollY = window.scrollY;
     const financeBox = document.getElementById('students');
-    const preservedLessonScrolls = financeBox
-      ? Array.from(financeBox.querySelectorAll('.lessons')).map(el => el.scrollTop)
-      : [];
+    const preservedLessonScrolls = {};
+    if(financeBox){
+      financeBox.querySelectorAll('.student-card').forEach(card => {
+        const sid = card.dataset.studentId;
+        const lessons = card.querySelector('.lessons');
+        if(sid && lessons) preservedLessonScrolls[sid] = lessons.scrollTop;
+      });
+    }
     state.students.forEach(s=>{ if(s.scheduleStart) recalcLessons(s); });
     const box = document.getElementById('students');
     box.innerHTML = '';
@@ -2654,6 +2659,7 @@ body{
       const isCollapsed = !!state.collapsed[s.id];
       const card = document.createElement('div');
       card.className = 'student-card' + (isCollapsed?' collapsed':'');
+      card.dataset.studentId = s.id;
       const today = todayISO();
       const hasSchedule = !!s.scheduleStart;
       let lessonsHTML = '';
@@ -2787,10 +2793,11 @@ body{
     requestAnimationFrame(() => {
       window.scrollTo(0, preservedScrollY);
 
-      const lessonLists = document.querySelectorAll('#students .lessons');
-      lessonLists.forEach((el, index) => {
-        if(index < preservedLessonScrolls.length){
-          el.scrollTop = preservedLessonScrolls[index];
+      document.querySelectorAll('#students .student-card').forEach(card => {
+        const sid = card.dataset.studentId;
+        const lessons = card.querySelector('.lessons');
+        if(sid && lessons && preservedLessonScrolls[sid] != null){
+          lessons.scrollTop = preservedLessonScrolls[sid];
         }
       });
     });
