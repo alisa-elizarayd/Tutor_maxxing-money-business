@@ -2456,44 +2456,117 @@ body{
   function recalcLessons(student){
     const today = todayISO();
     const totalPaid = student.payments.reduce((sum,p)=>sum+p.lessons, 0);
+
+    // Completed lessons and both move types consume the original subscription lesson.
     let used = 0;
-    student.lessons.forEach(l=>{ if(l.status === 'done' || l.status === 'paid-move') used++; });
-    let remaining = Math.max(0, totalPaid - used);
     student.lessons.forEach(l=>{
-      if(l.status === 'planned'){
-        const isPast = l.date < today;
-        if(isPast){
-          if(remaining > 0){ remaining--; l.status = 'done'; }
-          else l.status = 'unpaid';
-        } else {
-          if(remaining > 0){ remaining--; }
-          else l.status = 'beyond';
-        }
+      if(l.status === 'done' || l.status === 'paid-move' || l.status === 'free-move'){
+        used++;
       }
     });
-    const doneCount = student.lessons.filter(l=>l.status==='done'||l.status==='paid-move').length;
+
+    let remaining = Math.max(0, totalPaid - used);
+
+    student.lessons.forEach(l=>{
+      if(l.status !== 'planned') return;
+
+      const isPast = l.date < today;
+
+      // A replacement created by a free move is already covered by the
+      // original paid lesson and therefore never becomes unpaid/beyond.
+      if(l.coveredByFreeMove){
+        if(isPast) l.status = 'done';
+        return;
+      }
+
+      if(isPast){
+        if(remaining > 0){ remaining--; l.status = 'done'; }
+        else l.status = 'unpaid';
+      } else {
+        if(remaining > 0){ remaining--; }
+        else l.status = 'beyond';
+      }
+    });
+
+    const doneCount = student.lessons.filter(l=>
+      l.status === 'done' ||
+      l.status === 'paid-move' ||
+      l.status === 'free-move'
+    ).length;
     student.balance = Math.max(0, totalPaid - doneCount);
   }
 
   window.setLessonStatus = function(sid, lid, status){
     const s = state.students.find(x=>x.id===sid);
-    const l = s.lessons.find(x=>x.id===lid);
+    const l = s && s.lessons.find(x=>x.id===lid);
     if(!l) return;
-    pushUndo(`Смена статуса «${s.name}» — ${l.date}`);
-    l.status = status;
+
+    const previousStatus = l.status;
+
     if(status === 'free-move' || status === 'paid-move'){
-      const nd = prompt('На какую дату переносим? (ГГГГ-ММ-ДД)', l.date);
-      if(nd){
-        l.movedTo = nd;
-        const exists = s.lessons.some(x=>x.date===nd && x.id!==l.id);
-        if(!exists){
-          s.lessons.push({id:uid(), date:nd, status:'planned', movedFrom:l.date});
-          s.lessons.sort((a,b)=>a.date.localeCompare(b.date));
-        }
+      const nd = prompt('На какую дату переносим? (ГГГГ-ММ-ДД)', l.movedTo || l.date);
+      if(!nd) return;
+
+      const normalizedDate = nd.trim();
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)){
+        alert('Введите дату в формате ГГГГ-ММ-ДД.');
+        return;
       }
-    } else { l.movedTo = null; }
+
+      const parsedDate = new Date(normalizedDate + 'T00:00:00');
+      if(Number.isNaN(parsedDate.getTime()) || toISO(parsedDate) !== normalizedDate){
+        alert('Такой даты не существует.');
+        return;
+      }
+
+      const exists = s.lessons.some(x=>
+        x.id !== l.id &&
+        x.date === normalizedDate &&
+        x.name === l.name
+      );
+
+      if(exists){
+        alert('🚫 У этого ученика уже есть урок на выбранную дату. Перенос отменён.');
+        return;
+      }
+
+      pushUndo(`Смена статуса «${s.name}» — ${l.date}`);
+      l.status = status;
+      l.movedTo = normalizedDate;
+
+      s.lessons = s.lessons.filter(x=>
+        !(x.movedFrom === l.date && x.generatedByMoveId === l.id)
+      );
+
+      const replacement = {
+        id: uid(),
+        date: normalizedDate,
+        status: 'planned',
+        movedFrom: l.date,
+        generatedByMoveId: l.id
+      };
+
+      if(status === 'free-move'){
+        replacement.coveredByFreeMove = true;
+      }
+
+      s.lessons.push(replacement);
+      s.lessons.sort((a,b)=>a.date.localeCompare(b.date));
+    } else {
+      pushUndo(`Смена статуса «${s.name}» — ${l.date}`);
+      l.status = status;
+      l.movedTo = null;
+
+      if(previousStatus === 'free-move' || previousStatus === 'paid-move'){
+        s.lessons = s.lessons.filter(x=>
+          !(x.movedFrom === l.date && x.generatedByMoveId === l.id)
+        );
+      }
+    }
+
     recalcLessons(s);
-    save(); render();
+    save();
+    render();
   };
 
   function calcReport(s){
@@ -2510,6 +2583,7 @@ body{
   }
 
   function render(){
+    const preservedScrollY = window.scrollY;
     state.students.forEach(s=>{ if(s.scheduleStart) recalcLessons(s); });
     const box = document.getElementById('students');
     box.innerHTML = '';
@@ -2649,6 +2723,9 @@ body{
     });
 
     renderNotes();
+     requestAnimationFrame(() => {
+      window.scrollTo(0, preservedScrollY);
+    });
   }
 
   function lessonHTML(sid, l, today){
