@@ -2474,7 +2474,13 @@ body{
 
       // A replacement created by a free move is already covered by the
       // original paid lesson and therefore never becomes unpaid/beyond.
-      if(l.coveredByFreeMove){
+      const coveredByFreeMove = l.coveredByFreeMove || student.lessons.some(m=>
+        m.status === 'free-move' &&
+        m.movedTo === l.date &&
+        m.date === l.movedFrom
+      );
+      if(coveredByFreeMove){
+        l.coveredByFreeMove = true;
         if(isPast) l.status = 'done';
         return;
       }
@@ -2521,8 +2527,7 @@ body{
 
       const exists = s.lessons.some(x=>
         x.id !== l.id &&
-        x.date === normalizedDate &&
-        x.name === l.name
+        x.date === normalizedDate
       );
 
       if(exists){
