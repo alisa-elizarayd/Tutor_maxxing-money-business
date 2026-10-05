@@ -545,8 +545,8 @@ body{
 #view-finance .mission span{opacity:.92;font-size:12px;}
 
 #view-finance .layout{
-  display:grid;grid-template-columns: 1fr 300px;gap:20px;
-  padding:20px 30px 40px;align-items:start;
+  display:grid;grid-template-columns: minmax(0,1fr) 260px;gap:16px;
+  padding:20px 24px 40px;align-items:start;
 }
 #view-finance .panel{
   background:var(--card);border-radius:14px;box-shadow:var(--shadow);
@@ -629,7 +629,14 @@ body{
 #view-finance .sub-title{font-size:11px;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;}
 #view-finance .pay-row{display:grid;grid-template-columns: 1fr 1fr 1fr auto;gap:8px;margin-bottom:10px;align-items:end;}
 #view-finance .pay-row label{font-size:10px;color:var(--muted);display:block;margin-bottom:3px;}
-#view-finance .lessons{max-height:280px;overflow:auto;border:1px solid var(--line);border-radius:8px;background:#fff;}
+#view-finance .lessons{
+  max-height:560px;
+  overflow:auto;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:#fff;
+  scrollbar-gutter:stable;
+}
 
 #view-finance .divider-beyond{
   display:flex;align-items:center;gap:8px;padding:7px 10px;
@@ -769,6 +776,7 @@ body{
   #view-finance .mission{padding:12px 14px;font-size:11px;gap:10px;}
   #view-finance .mission span{font-size:11px;}
   #view-finance .layout{padding:14px;gap:14px;}
+  #view-finance .lessons{max-height:440px;}
   #view-finance .panel{padding:14px;}
 
   #view-finance .student-form{grid-template-columns:1fr 1fr;gap:7px;}
