@@ -632,6 +632,11 @@ body{
 #view-finance .lessons{
   max-height:560px;
   overflow:auto;
+  overflow-anchor:none;
+  overscroll-behavior:contain;
+  overscroll-behavior-y:contain;
+  -webkit-overflow-scrolling:touch;
+  touch-action:pan-y;
   border:1px solid var(--line);
   border-radius:8px;
   background:#fff;
@@ -2834,8 +2839,6 @@ body{
     renderNotes();
 
     requestAnimationFrame(() => {
-      window.scrollTo(0, preservedScrollY);
-
       document.querySelectorAll('#students .student-card').forEach(card => {
         const sid = card.dataset.studentId;
         const lessons = card.querySelector('.lessons');
