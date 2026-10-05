@@ -2439,13 +2439,13 @@ body{
     s.payments.push({ id:uid(), date: todayISO(), lessons, amount, startDate });
     if(!s.scheduleStart || startDate < s.scheduleStart){ s.scheduleStart = startDate; }
     s.balance += lessons;
-    buildLessonsForPayment(s, startDate, lessons);
+    buildLessonsForPayment(s, startDate, lessons, s.payments[s.payments.length - 1].id);
     recalcLessons(s);
     lessonsInput.value = '';
     save(); render();
   };
 
-  function buildLessonsForPayment(student, startDate, count){
+  function buildLessonsForPayment(student, startDate, count, paymentId){
     const existing = new Set(student.lessons.map(l=>l.date));
     const cursor = new Date(startDate+'T00:00:00');
     let added = 0, guard = 0;
@@ -2456,7 +2456,7 @@ body{
       if(student.days.includes(wd)){
         const iso = toISO(cursor);
         if(!existing.has(iso)){
-          student.lessons.push({ id:uid(), date:iso, status:'planned', movedFrom:null });
+          student.lessons.push({ id:uid(), date:iso, status:'planned', movedFrom:null, paymentId: paymentId || null, entitlementId: uid() });
           existing.add(iso);
           added++;
         }
@@ -2466,54 +2466,119 @@ body{
     student.lessons.sort((a,b)=>a.date.localeCompare(b.date));
   }
 
-  function recalcLessons(student){
-    const today = todayISO();
-    const totalPaid = student.payments.reduce((sum,p)=>sum+p.lessons, 0);
+  function ensureLessonEntitlements(student){
+    const payments = [...student.payments].sort((a,b)=>
+      (a.startDate||'').localeCompare(b.startDate||'')
+    );
 
-    // Completed lessons and both move types consume the original subscription lesson.
-    let used = 0;
-    student.lessons.forEach(l=>{
-      if(l.status === 'done' || l.status === 'paid-move' || l.status === 'free-move'){
-        used++;
+    const originals = student.lessons
+      .filter(l => !l.generatedByMoveId)
+      .sort((a,b) => a.date.localeCompare(b.date));
+
+    let cursor = 0;
+    payments.forEach(payment => {
+      for(let i=0; i<payment.lessons && cursor<originals.length; i++,cursor++){
+        const lesson = originals[cursor];
+        if(!lesson.entitlementId) lesson.entitlementId = uid();
+        if(!lesson.paymentId) lesson.paymentId = payment.id || null;
       }
     });
 
-    let remaining = Math.max(0, totalPaid - used);
+    student.lessons.forEach(l => {
+      if(!l.generatedByMoveId) return;
+      const source = student.lessons.find(x => x.id === l.generatedByMoveId);
+      if(source){
+        if(source.entitlementId) l.entitlementId = source.entitlementId;
+        if(source.paymentId) l.paymentId = source.paymentId;
+      }
+    });
+  }
 
-    student.lessons.forEach(l=>{
-      if(l.status !== 'planned') return;
+  function recalcLessons(student){
+    const today = todayISO();
+    ensureLessonEntitlements(student);
 
-      const isPast = l.date < today;
+    const totalPaid = student.payments.reduce((sum,p)=>sum+p.lessons, 0);
 
-      // A replacement created by a free move is already covered by the
-      // original paid lesson and therefore never becomes unpaid/beyond.
-      const coveredByFreeMove = l.coveredByFreeMove || student.lessons.some(m=>
-        m.status === 'free-move' &&
-        m.movedTo === l.date &&
-        m.date === l.movedFrom
-      );
-      if(coveredByFreeMove){
-        l.coveredByFreeMove = true;
-        if(isPast) l.status = 'done';
+    // One entitlement = one paid lesson. A free move changes its date,
+    // but never creates another entitlement.
+    const entitlements = [];
+    const seen = new Set();
+
+    student.lessons
+      .filter(l => !l.generatedByMoveId && l.entitlementId)
+      .sort((a,b)=>a.date.localeCompare(b.date))
+      .forEach(source => {
+        if(seen.has(source.entitlementId)) return;
+        seen.add(source.entitlementId);
+
+        const replacement = student.lessons.find(x =>
+          x.generatedByMoveId === source.id &&
+          source.status === 'free-move'
+        );
+
+        entitlements.push({
+          id: source.entitlementId,
+          source,
+          effective: replacement || source
+        });
+      });
+
+    const paidEntitlements = Math.min(totalPaid, entitlements.length);
+    let used = 0;
+
+    entitlements.forEach(ent => {
+      const source = ent.source;
+      const effective = ent.effective;
+
+      if(source.status === 'free-move'){
+        used++;
+        effective.coveredByFreeMove = true;
+        if(effective.status === 'planned' && effective.date < today){
+          effective.status = 'done';
+        }
         return;
       }
 
-      if(isPast){
-        if(remaining > 0){ remaining--; l.status = 'done'; }
-        else l.status = 'unpaid';
+      if(source.status === 'done' || source.status === 'paid-move'){
+        used++;
+        return;
+      }
+
+      if(effective.status !== 'planned') return;
+
+      const isPast = effective.date < today;
+      if(used < paidEntitlements){
+        used++;
+        if(isPast) effective.status = 'done';
       } else {
-        if(remaining > 0){ remaining--; }
-        else l.status = 'beyond';
+        effective.status = isPast ? 'unpaid' : 'beyond';
       }
     });
 
-    const doneCount = student.lessons.filter(l=>
-      l.status === 'done' ||
-      l.status === 'paid-move' ||
-      l.status === 'free-move'
-    ).length;
-    student.balance = Math.max(0, totalPaid - doneCount);
+    // Free-move replacements are always covered by their original entitlement.
+    student.lessons.forEach(l => {
+      if(!l.generatedByMoveId) return;
+      const source = student.lessons.find(x => x.id === l.generatedByMoveId);
+      if(source && source.status === 'free-move'){
+        l.coveredByFreeMove = true;
+        if(l.status === 'planned' && l.date < today) l.status = 'done';
+      }
+    });
+
+    const usedEntitlements = new Set(
+      entitlements
+        .filter(e =>
+          e.source.status === 'done' ||
+          e.source.status === 'paid-move' ||
+          e.source.status === 'free-move'
+        )
+        .map(e => e.id)
+    );
+
+    student.balance = Math.max(0, totalPaid - usedEntitlements.size);
   }
+
 
   function pickMoveDate(defaultDate){
     return new Promise(resolve => {
@@ -2604,7 +2669,9 @@ body{
         date: normalizedDate,
         status: 'planned',
         movedFrom: l.date,
-        generatedByMoveId: l.id
+        generatedByMoveId: l.id,
+        entitlementId: l.entitlementId || null,
+        paymentId: l.paymentId || null
       };
 
       if(status === 'free-move'){
