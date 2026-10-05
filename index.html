@@ -2668,22 +2668,65 @@ body{
       } else if(s.lessons.length === 0){
         lessonsHTML = '<div class="empty">Нет уроков</div>';
       } else {
-        const totalLessons = s.lessons.length;
+        // Build entitlement groups rather than counting raw rows.
+        // A move consists of one original lesson + one replacement row,
+        // but together they consume only ONE paid lesson from the subscription.
+        const moveReplacements = new Map(
+          s.lessons
+            .filter(l => l.generatedByMoveId)
+            .map(l => [l.generatedByMoveId, l])
+        );
+
+        const lessonGroups = [];
+        const replacementIds = new Set(
+          s.lessons.filter(l => l.generatedByMoveId).map(l => l.id)
+        );
+
+        s.lessons.forEach(l => {
+          // Replacement rows are already attached to their source lesson.
+          if(replacementIds.has(l.id)) return;
+
+          const groupLessons = [l];
+          const replacement = moveReplacements.get(l.id);
+          if(replacement) groupLessons.push(replacement);
+
+          lessonGroups.push({
+            lessons: groupLessons,
+            entitlementCount: 1
+          });
+        });
+
         const sortedPayments = [...s.payments].sort((a,b) => (a.startDate||'').localeCompare(b.startDate||''));
         let cursor = 0;
         const blocks = [];
+
         sortedPayments.forEach((p, idx) => {
           const count = p.lessons;
-          const blockLessons = s.lessons.slice(cursor, cursor + count);
-          if(blockLessons.length > 0){
-            blocks.push({ type: 'subscription', index: idx, payment: p, lessons: blockLessons });
+          const blockGroups = lessonGroups.slice(cursor, cursor + count);
+
+          if(blockGroups.length > 0){
+            blocks.push({
+              type: 'subscription',
+              index: idx,
+              payment: p,
+              groups: blockGroups,
+              lessons: blockGroups.flatMap(g => g.lessons),
+              entitlements: blockGroups.reduce((sum,g) => sum + g.entitlementCount, 0)
+            });
           }
+
           cursor += count;
         });
-        if(cursor < totalLessons){
-          const beyondLessons = s.lessons.slice(cursor);
-          if(beyondLessons.length > 0){
-            blocks.push({ type: 'beyond', lessons: beyondLessons });
+
+        if(cursor < lessonGroups.length){
+          const beyondGroups = lessonGroups.slice(cursor);
+          if(beyondGroups.length > 0){
+            blocks.push({
+              type: 'beyond',
+              groups: beyondGroups,
+              lessons: beyondGroups.flatMap(g => g.lessons),
+              entitlements: beyondGroups.reduce((sum,g) => sum + g.entitlementCount, 0)
+            });
           }
         }
         if(blocks.length === 0){
@@ -2699,7 +2742,7 @@ body{
                   <span class="sub-icon">💳</span>
                   <span class="sub-label">Абонемент #${block.index + 1}</span>
                   <span class="sub-date">от ${fmtDate(p.startDate || p.date)}</span>
-                  <span class="sub-count">${block.lessons.length} / ${p.lessons} ур.</span>
+                  <span class="sub-count">${block.entitlements} / ${p.lessons} ур.</span>
                 </div>
                 ${block.lessons.map(l => lessonHTML(s.id, l, today)).join('')}
               </div>
@@ -2710,7 +2753,7 @@ body{
                 <div class="subscription-header">
                   <span class="sub-icon">⚠</span>
                   <span class="sub-label">Сверх абонемента — не оплачено</span>
-                  <span class="sub-count">${block.lessons.length} ур.</span>
+                  <span class="sub-count">${block.entitlements} ур.</span>
                 </div>
                 ${block.lessons.map(l => lessonHTML(s.id, l, today)).join('')}
               </div>
