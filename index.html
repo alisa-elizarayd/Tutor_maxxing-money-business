@@ -2597,6 +2597,10 @@ body{
 
   function render(){
     const preservedScrollY = window.scrollY;
+    const financeBox = document.getElementById('students');
+    const preservedLessonScrolls = financeBox
+      ? Array.from(financeBox.querySelectorAll('.lessons')).map(el => el.scrollTop)
+      : [];
     state.students.forEach(s=>{ if(s.scheduleStart) recalcLessons(s); });
     const box = document.getElementById('students');
     box.innerHTML = '';
@@ -2736,8 +2740,16 @@ body{
     });
 
     renderNotes();
-     requestAnimationFrame(() => {
+
+    requestAnimationFrame(() => {
       window.scrollTo(0, preservedScrollY);
+
+      const lessonLists = document.querySelectorAll('#students .lessons');
+      lessonLists.forEach((el, index) => {
+        if(index < preservedLessonScrolls.length){
+          el.scrollTop = preservedLessonScrolls[index];
+        }
+      });
     });
   }
 
@@ -2944,7 +2956,7 @@ body{
   render();
   updateClock();
   updateUndoFinanceBtn();
-  setInterval(() => { updateClock(); render(); }, 30000);
+  setInterval(() => { updateClock(); }, 30000);
 // === АВТОСОХРАНЕНИЕ (для iOS Safari) ===
   window.addEventListener('beforeunload', () => {
     save();
