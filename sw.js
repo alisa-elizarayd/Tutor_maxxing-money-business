@@ -1,6 +1,6 @@
 // === Service Worker для приложения "Репетитор" ===
 // Версия кеша — увеличивай при обновлениях (v1.0.0 → v1.0.1 → ...)
-const CACHE_NAME = 'tutor-app-v1.1.2';
+const CACHE_NAME = 'tutor-app-v1.1.3';
 
 // Файлы для кеширования при первой загрузке
 const PRECACHE_URLS = [
