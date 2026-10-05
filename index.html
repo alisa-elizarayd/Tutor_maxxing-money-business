@@ -2500,29 +2500,24 @@ body{
 
     const totalPaid = student.payments.reduce((sum,p)=>sum+p.lessons, 0);
 
-    // One entitlement = one paid lesson. A free move changes its date,
-    // but never creates another entitlement.
-    const entitlements = [];
-    const seen = new Set();
+    // Group every visual row by the same paid entitlement.
+    // A free-move chain (original -> move -> move -> ...) is still ONE lesson.
+    const groupsByEntitlement = new Map();
+    student.lessons.forEach(l => {
+      if(!l.entitlementId) return;
+      if(!groupsByEntitlement.has(l.entitlementId)) groupsByEntitlement.set(l.entitlementId, []);
+      groupsByEntitlement.get(l.entitlementId).push(l);
+    });
 
-    student.lessons
-      .filter(l => !l.generatedByMoveId && l.entitlementId)
-      .sort((a,b)=>a.date.localeCompare(b.date))
-      .forEach(source => {
-        if(seen.has(source.entitlementId)) return;
-        seen.add(source.entitlementId);
-
-        const replacement = student.lessons.find(x =>
-          x.generatedByMoveId === source.id &&
-          source.status === 'free-move'
-        );
-
-        entitlements.push({
-          id: source.entitlementId,
-          source,
-          effective: replacement || source
-        });
-      });
+    const entitlements = [...groupsByEntitlement.entries()]
+      .map(([id, lessons]) => {
+        const root = lessons.find(l => !l.generatedByMoveId) || lessons[0];
+        const effective = lessons.find(l =>
+          !lessons.some(x => x.generatedByMoveId === l.id)
+        ) || root;
+        return { id, lessons, source: root, effective };
+      })
+      .sort((a,b) => a.source.date.localeCompare(b.source.date));
 
     const paidEntitlements = Math.min(totalPaid, entitlements.length);
     let used = 0;
@@ -2530,10 +2525,17 @@ body{
     entitlements.forEach(ent => {
       const source = ent.source;
       const effective = ent.effective;
+      const hasFreeMove = ent.lessons.some(l => l.status === 'free-move');
 
-      if(source.status === 'free-move'){
+      if(hasFreeMove){
         used++;
         effective.coveredByFreeMove = true;
+
+        // Every row in this move chain belongs to the same paid lesson.
+        ent.lessons.forEach(l => {
+          if(l !== effective) l.coveredByFreeMove = true;
+        });
+
         if(effective.status === 'planned' && effective.date < today){
           effective.status = 'done';
         }
@@ -2548,6 +2550,7 @@ body{
       if(effective.status !== 'planned') return;
 
       const isPast = effective.date < today;
+
       if(used < paidEntitlements){
         used++;
         if(isPast) effective.status = 'done';
@@ -2556,11 +2559,12 @@ body{
       }
     });
 
-    // Free-move replacements are always covered by their original entitlement.
+    // Any free-move replacement, including a second/third move in the same chain,
+    // is always covered by the original entitlement.
     student.lessons.forEach(l => {
       if(!l.generatedByMoveId) return;
       const source = student.lessons.find(x => x.id === l.generatedByMoveId);
-      if(source && source.status === 'free-move'){
+      if(source && (source.status === 'free-move' || l.coveredByFreeMove)){
         l.coveredByFreeMove = true;
         if(l.status === 'planned' && l.date < today) l.status = 'done';
       }
@@ -2570,8 +2574,7 @@ body{
       entitlements
         .filter(e =>
           e.source.status === 'done' ||
-          e.source.status === 'paid-move' ||
-          e.source.status === 'free-move'
+          e.lessons.some(l => l.status === 'free-move')
         )
         .map(e => e.id)
     );
@@ -2740,33 +2743,23 @@ body{
       } else if(s.lessons.length === 0){
         lessonsHTML = '<div class="empty">Нет уроков</div>';
       } else {
-        // Build entitlement groups rather than counting raw rows.
-        // A move consists of one original lesson + one replacement row,
-        // but together they consume only ONE paid lesson from the subscription.
-        const moveReplacements = new Map(
-          s.lessons
-            .filter(l => l.generatedByMoveId)
-            .map(l => [l.generatedByMoveId, l])
-        );
-
-        const lessonGroups = [];
-        const replacementIds = new Set(
-          s.lessons.filter(l => l.generatedByMoveId).map(l => l.id)
-        );
-
+        // Group visual rows by stable paid entitlement IDs.
+        // Original lesson + any number of free-move replacements = one group.
+        const entitlementGroups = new Map();
         s.lessons.forEach(l => {
-          // Replacement rows are already attached to their source lesson.
-          if(replacementIds.has(l.id)) return;
-
-          const groupLessons = [l];
-          const replacement = moveReplacements.get(l.id);
-          if(replacement) groupLessons.push(replacement);
-
-          lessonGroups.push({
-            lessons: groupLessons,
-            entitlementCount: 1
-          });
+          if(!l.entitlementId) return;
+          if(!entitlementGroups.has(l.entitlementId)) entitlementGroups.set(l.entitlementId, []);
+          entitlementGroups.get(l.entitlementId).push(l);
         });
+
+        const lessonGroups = [...entitlementGroups.entries()]
+          .map(([entitlementId, lessons]) => ({
+            entitlementId,
+            lessons: lessons.sort((a,b)=>a.date.localeCompare(b.date)),
+            source: lessons.find(l => !l.generatedByMoveId) || lessons[0],
+            entitlementCount: 1
+          }))
+          .sort((a,b)=>a.source.date.localeCompare(b.source.date));
 
         const sortedPayments = [...s.payments].sort((a,b) => (a.startDate||'').localeCompare(b.startDate||''));
         let cursor = 0;
@@ -2783,7 +2776,7 @@ body{
               payment: p,
               groups: blockGroups,
               lessons: blockGroups.flatMap(g => g.lessons),
-              entitlements: blockGroups.reduce((sum,g) => sum + g.entitlementCount, 0)
+              entitlements: blockGroups.length
             });
           }
 
@@ -2797,7 +2790,7 @@ body{
               type: 'beyond',
               groups: beyondGroups,
               lessons: beyondGroups.flatMap(g => g.lessons),
-              entitlements: beyondGroups.reduce((sum,g) => sum + g.entitlementCount, 0)
+              entitlements: beyondGroups.length
             });
           }
         }
