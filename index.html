@@ -3050,8 +3050,27 @@ body{
 
   if('serviceWorker' in navigator){
     window.addEventListener('load', () => {
+      const hadController = !!navigator.serviceWorker.controller;
+
+      // Если новый Service Worker активировался поверх уже открытого приложения,
+      // автоматически перезагружаем страницу один раз, чтобы сразу показать новую версию.
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if(hadController && !sessionStorage.getItem('swReloaded')){
+          sessionStorage.setItem('swReloaded', '1');
+          window.location.reload();
+        }
+      });
+
       navigator.serviceWorker.register('./sw.js', { scope: './' })
-        .then(reg => console.log('✅ SW зарегистрирован:', reg.scope))
+        .then(reg => {
+          console.log('✅ SW зарегистрирован:', reg.scope);
+          // Просим браузер немедленно проверить, не появилась ли новая версия SW.
+          return reg.update();
+        })
+        .then(() => {
+          // После успешной перезагрузки разрешаем следующий автоматический апдейт.
+          sessionStorage.removeItem('swReloaded');
+        })
         .catch(err => console.warn('⚠ SW ошибка:', err));
     });
   }
