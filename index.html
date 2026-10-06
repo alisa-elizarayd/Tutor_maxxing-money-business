@@ -3210,11 +3210,14 @@ body{
       navigator.serviceWorker.register('./sw.js', { scope: './' })
         .then(reg => {
           console.log('✅ SW зарегистрирован:', reg.scope);
-          // Просим браузер немедленно проверить, не появилась ли новая версия SW.
-          return reg.update();
-        })
-        .then(() => {
-          // После успешной перезагрузки разрешаем следующий автоматический апдейт.
+          // Проверяем обновления сразу, при возврате во вкладку и периодически,
+          // чтобы новая версия PWA применялась без ручной очистки кеша.
+          const checkForUpdate = () => reg.update().catch(err => console.warn('⚠ SW update:', err));
+          checkForUpdate();
+          document.addEventListener('visibilitychange', () => {
+            if(!document.hidden) checkForUpdate();
+          });
+          window.setInterval(checkForUpdate, 60000);
           sessionStorage.removeItem('swReloaded');
         })
         .catch(err => console.warn('⚠ SW ошибка:', err));
