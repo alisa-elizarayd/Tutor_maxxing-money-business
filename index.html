@@ -2801,7 +2801,7 @@ body{
     const effective = groups.map(group => group.effective);
     const paidMove = s.lessons.filter(l=>l.status==='paid-move').length;
     const freeMove = s.lessons.filter(l=>l.status==='free-move').length;
-    const cancel = effective.filter(l=>l.status==='cancel').length;
+    const cancel = s.lessons.filter(l=>l.status==='cancel').length;
     const done = effective.filter(l=>l.status==='done').length;
     const unpaid = effective.filter(l=>l.status==='unpaid').length;
     const planned = effective.filter(l=>l.status==='planned').length;
