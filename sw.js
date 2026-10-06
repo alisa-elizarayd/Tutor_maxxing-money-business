@@ -1,8 +1,6 @@
 // === Service Worker для приложения "Репетитор" ===
-// Версия кеша — увеличивай при обновлениях (v1.0.0 → v1.0.1 → ...)
-const CACHE_NAME = 'tutor-app-v1.1.3';
+const CACHE_NAME = 'tutor-app-v1.1.4';
 
-// Файлы для кеширования при первой загрузке
 const PRECACHE_URLS = [
   './',
   './index.html',
@@ -11,88 +9,68 @@ const PRECACHE_URLS = [
   './icons/icon-512.png'
 ];
 
-// === Установка: кешируем основные файлы ===
 self.addEventListener('install', (event) => {
-  console.log('[SW] Установка...');
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('[SW] Кеширую основные файлы');
-        return cache.addAll(PRECACHE_URLS);
-      })
+      .then(cache => cache.addAll(PRECACHE_URLS))
       .then(() => self.skipWaiting())
   );
 });
 
-// === Активация: чистим старые кеши ===
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Активация...');
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => {
-            console.log('[SW] Удаляю старый кеш:', name);
-            return caches.delete(name);
-          })
-      );
-    }).then(() => self.clients.claim())
+    caches.keys().then(names => Promise.all(
+      names.filter(name => name !== CACHE_NAME).map(name => caches.delete(name))
+    )).then(() => self.clients.claim())
   );
 });
 
-// === Fetch: Cache First, потом сеть ===
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-  
-  // Пропускаем не-GET запросы
-  if (request.method !== 'GET') return;
-  
-  // Пропускаем внешние домены
+  if(request.method !== 'GET') return;
+
   const url = new URL(request.url);
-  if (url.origin !== location.origin) return;
-  
-  event.respondWith(
-    caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Отдаём из кеша, в фоне обновляем
-        const fetchPromise = fetch(request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
-            });
+  if(url.origin !== location.origin) return;
+
+  // HTML must be network-first. Otherwise a deployment can remain invisible
+  // because an old index.html is returned from cache forever.
+  const isDocument = request.mode === 'navigate' ||
+    url.pathname.endsWith('/index.html') ||
+    url.pathname.endsWith('/');
+
+  if(isDocument){
+    event.respondWith(
+      fetch(request, { cache: 'no-store' })
+        .then(response => {
+          if(response && response.ok){
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
           }
-          return networkResponse;
-        }).catch(() => cachedResponse);
-        
-        return cachedResponse;
-      }
-      
-      // Нет в кеше — идём в сеть
-      return fetch(request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200) {
-          return networkResponse;
+          return response;
+        })
+        .catch(() => caches.match(request).then(cached => cached || caches.match('./index.html')))
+    );
+    return;
+  }
+
+  // Static assets remain available offline and are refreshed in the background.
+  event.respondWith(
+    caches.match(request).then(cached => {
+      const network = fetch(request).then(response => {
+        if(response && response.ok){
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
         }
-        const responseClone = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(request, responseClone);
-        });
-        return networkResponse;
-      }).catch(() => {
-        // Офлайн-fallback
-        if (request.mode === 'navigate') {
-          return caches.match('./index.html');
-        }
-        return new Response('Офлайн-режим', { status: 503 });
-      });
+        return response;
+      }).catch(() => cached);
+
+      return cached || network;
     })
   );
 });
 
-// === Обработка сообщений (для обновления по кнопке) ===
 self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
+  if(event.data && event.data.type === 'SKIP_WAITING'){
     self.skipWaiting();
   }
 });
