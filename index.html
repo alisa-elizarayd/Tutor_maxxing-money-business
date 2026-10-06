@@ -2491,11 +2491,35 @@ body{
     });
 
     student.lessons.forEach(l => {
+      // An ordinary cancellation keeps the same paid entitlement:
+      // the replacement date is still the same prepaid lesson.
+      if(l.generatedByCancelId){
+        const source = student.lessons.find(x => x.id === l.generatedByCancelId);
+        if(source){
+          l.entitlementId = source.entitlementId || l.entitlementId || uid();
+          l.paymentId = source.paymentId || l.paymentId || null;
+        }
+        return;
+      }
+
       if(!l.generatedByMoveId) return;
       const source = student.lessons.find(x => x.id === l.generatedByMoveId);
-      if(source){
-        if(source.entitlementId) l.entitlementId = source.entitlementId;
-        if(source.paymentId) l.paymentId = source.paymentId;
+      if(!source) return;
+
+      // Free move = same entitlement. Paid move = late cancellation
+      // that consumes the old entitlement; its new date is a new slot.
+      const isFreeMove = l.moveType === 'free' ||
+        (!l.moveType && (source.status === 'free-move' || source.coveredByFreeMove));
+
+      if(isFreeMove){
+        l.entitlementId = source.entitlementId || l.entitlementId || uid();
+        l.paymentId = source.paymentId || l.paymentId || null;
+      } else {
+        // Migrate legacy paid-move rows that used to share the source ID.
+        if(!l.entitlementId || l.entitlementId === source.entitlementId){
+          l.entitlementId = uid();
+        }
+        l.paymentId = null;
       }
     });
   }
@@ -2580,7 +2604,8 @@ body{
       entitlements
         .filter(e =>
           e.source.status === 'done' ||
-          e.lessons.some(l => l.status === 'free-move')
+          e.source.status === 'paid-move' ||
+          e.effective.status === 'done'
         )
         .map(e => e.id)
     );
@@ -2638,13 +2663,28 @@ body{
     while(changed){
       changed = false;
       student.lessons.forEach(item => {
-        if(item.generatedByMoveId && removed.has(item.generatedByMoveId) && !removed.has(item.id)){
+        const parent = item.generatedByMoveId || item.generatedByCancelId;
+        if(parent && removed.has(parent) && !removed.has(item.id)){
           removed.add(item.id);
           changed = true;
         }
       });
     }
     student.lessons = student.lessons.filter(item => !removed.has(item.id) || item.id === parentId);
+  }
+
+  function nextScheduleDate(student, fromDate){
+    const occupied = new Set(student.lessons.map(item => item.date));
+    const cursor = new Date((fromDate || todayISO()) + 'T00:00:00');
+    const MAX_ITER = 366 * 10;
+
+    for(let i=0; i<MAX_ITER; i++){
+      cursor.setDate(cursor.getDate() + 1);
+      const iso = toISO(cursor);
+      const weekday = DAYS[(cursor.getDay()+6)%7];
+      if(student.days.includes(weekday) && !occupied.has(iso)) return iso;
+    }
+    return null;
   }
 
   window.setLessonStatus = async function(sid, lid, status){
@@ -2659,7 +2699,7 @@ body{
       if(!nd) return;
 
       const normalizedDate = nd.trim();
-      if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(normalizedDate)){
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)){
         alert('Введите корректную дату.');
         return;
       }
@@ -2670,23 +2710,18 @@ body{
         return;
       }
 
-      const exists = s.lessons.some(x=>
-        x.id !== l.id &&
-        x.date === normalizedDate
+      const exists = s.lessons.some(x =>
+        x.id !== l.id && x.date === normalizedDate
       );
-
       if(exists){
         alert('🚫 У этого ученика уже есть урок на выбранную дату. Перенос отменён.');
         return;
       }
 
       pushUndo(`Смена статуса «${s.name}» — ${l.date}`);
+      removeMoveDescendants(s, l.id);
       l.status = status;
       l.movedTo = normalizedDate;
-
-      s.lessons = s.lessons.filter(x=>
-        !(x.movedFrom === l.date && x.generatedByMoveId === l.id)
-      );
 
       const replacement = {
         id: uid(),
@@ -2694,22 +2729,48 @@ body{
         status: 'planned',
         movedFrom: l.date,
         generatedByMoveId: l.id,
-        entitlementId: l.entitlementId || null,
-        paymentId: l.paymentId || null
+        moveType: status === 'free-move' ? 'free' : 'paid',
+        // Free move keeps the same entitlement. Paid move consumes the
+        // original slot and schedules the next paid slot separately.
+        entitlementId: status === 'free-move' ? (l.entitlementId || uid()) : uid(),
+        paymentId: status === 'free-move' ? (l.paymentId || null) : null
       };
 
-      if(status === 'free-move'){
-        replacement.coveredByFreeMove = true;
-      }
-
+      if(status === 'free-move') replacement.coveredByFreeMove = true;
       s.lessons.push(replacement);
+      s.lessons.sort((a,b)=>a.date.localeCompare(b.date));
+    } else if(status === 'cancel'){
+      pushUndo(`Отмена урока «${s.name}» — ${l.date}`);
+      removeMoveDescendants(s, l.id);
+      l.status = 'cancel';
+      l.movedTo = null;
+
+      // Cancellation is free and has no replacement date chosen manually.
+      // Extend the schedule by one next suitable weekday while keeping
+      // the same prepaid entitlement.
+      const lastDate = s.lessons.reduce(
+        (max,item) => item.date > max ? item.date : max,
+        l.date
+      );
+      const replacementDate = nextScheduleDate(s, lastDate);
+      if(replacementDate){
+        s.lessons.push({
+          id: uid(),
+          date: replacementDate,
+          status: 'planned',
+          movedFrom: l.date,
+          generatedByCancelId: l.id,
+          entitlementId: l.entitlementId || uid(),
+          paymentId: l.paymentId || null
+        });
+      }
       s.lessons.sort((a,b)=>a.date.localeCompare(b.date));
     } else {
       pushUndo(`Смена статуса «${s.name}» — ${l.date}`);
       l.status = status;
       l.movedTo = null;
 
-      if(previousStatus === 'free-move' || previousStatus === 'paid-move'){
+      if(previousStatus === 'free-move' || previousStatus === 'paid-move' || previousStatus === 'cancel'){
         removeMoveDescendants(s, l.id);
       }
     }
