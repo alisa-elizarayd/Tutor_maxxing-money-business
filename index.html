@@ -635,8 +635,10 @@ body{
   overflow-anchor:none;
   overscroll-behavior:contain;
   overscroll-behavior-y:contain;
+  overscroll-behavior-x:none;
   -webkit-overflow-scrolling:touch;
   touch-action:pan-y;
+  contain:layout paint;
   border:1px solid var(--line);
   border-radius:8px;
   background:#fff;
@@ -781,7 +783,11 @@ body{
   #view-finance .mission{padding:12px 14px;font-size:11px;gap:10px;}
   #view-finance .mission span{font-size:11px;}
   #view-finance .layout{padding:14px;gap:14px;}
-  #view-finance .lessons{max-height:70vh;min-height:500px;}
+  #view-finance .lessons{
+    height:clamp(500px,72dvh,760px);
+    max-height:none;
+    min-height:500px;
+  }
   #view-finance .panel{padding:14px;}
 
   #view-finance .student-form{grid-template-columns:1fr 1fr;gap:7px;}
@@ -2626,6 +2632,21 @@ body{
     });
   }
 
+  function removeMoveDescendants(student, parentId){
+    const removed = new Set([parentId]);
+    let changed = true;
+    while(changed){
+      changed = false;
+      student.lessons.forEach(item => {
+        if(item.generatedByMoveId && removed.has(item.generatedByMoveId) && !removed.has(item.id)){
+          removed.add(item.id);
+          changed = true;
+        }
+      });
+    }
+    student.lessons = student.lessons.filter(item => !removed.has(item.id) || item.id === parentId);
+  }
+
   window.setLessonStatus = async function(sid, lid, status){
     const s = state.students.find(x=>x.id===sid);
     const l = s && s.lessons.find(x=>x.id===lid);
@@ -2689,9 +2710,7 @@ body{
       l.movedTo = null;
 
       if(previousStatus === 'free-move' || previousStatus === 'paid-move'){
-        s.lessons = s.lessons.filter(x=>
-          !(x.movedFrom === l.date && x.generatedByMoveId === l.id)
-        );
+        removeMoveDescendants(s, l.id);
       }
     }
 
@@ -2700,17 +2719,35 @@ body{
     render();
   };
 
+  function getEntitlementGroups(student){
+    const groups = new Map();
+    student.lessons.forEach(l => {
+      if(!l.entitlementId) return;
+      if(!groups.has(l.entitlementId)) groups.set(l.entitlementId, []);
+      groups.get(l.entitlementId).push(l);
+    });
+    return [...groups.values()].map(lessons => {
+      const source = lessons.find(l => !l.generatedByMoveId) || lessons[0];
+      const effective = lessons.find(l =>
+        !lessons.some(other => other.generatedByMoveId === l.id)
+      ) || source;
+      return { lessons, source, effective };
+    });
+  }
+
   function calcReport(s){
-    const done = s.lessons.filter(l=>l.status==='done').length;
+    const groups = getEntitlementGroups(s);
+    const effective = groups.map(group => group.effective);
     const paidMove = s.lessons.filter(l=>l.status==='paid-move').length;
     const freeMove = s.lessons.filter(l=>l.status==='free-move').length;
-    const cancel = s.lessons.filter(l=>l.status==='cancel').length;
-    const unpaid = s.lessons.filter(l=>l.status==='unpaid').length;
-    const planned = s.lessons.filter(l=>l.status==='planned').length;
-    const beyond = s.lessons.filter(l=>l.status==='beyond').length;
+    const cancel = effective.filter(l=>l.status==='cancel').length;
+    const done = effective.filter(l=>l.status==='done').length;
+    const unpaid = effective.filter(l=>l.status==='unpaid').length;
+    const planned = effective.filter(l=>l.status==='planned').length;
+    const beyond = effective.filter(l=>l.status==='beyond').length;
     const income = s.payments.reduce((sum,p)=>sum+p.amount,0);
     const paidLessons = s.payments.reduce((sum,p)=>sum+p.lessons,0);
-    return { total:s.lessons.length, done, paidMove, freeMove, cancel, unpaid, planned, beyond, income, paidLessons, balance:s.balance };
+    return { total:groups.length, done, paidMove, freeMove, cancel, unpaid, planned, beyond, income, paidLessons, balance:s.balance };
   }
 
   function render(){
@@ -2906,6 +2943,9 @@ body{
           lessons.scrollTop = preservedLessonScrolls[sid];
         }
       });
+      // render() replaces the finance DOM. Restore the outer page position too,
+      // otherwise iOS Safari and desktop browsers jump to the top after an update.
+      window.scrollTo(0, preservedScrollY);
     });
   }
 
