@@ -223,6 +223,17 @@ body{
 }
 #view-calendar.dark .student-card { color: #e8e8ec; }
 #view-calendar .student-card:active { transform: scale(0.98); }
+#view-calendar .student-card.lesson-selected{
+  outline:3px solid #ff9800; outline-offset:2px;
+  box-shadow:0 0 0 5px rgba(255,152,0,.2);
+}
+#view-calendar .selection-toolbar{
+  display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+  margin-top:8px;
+}
+#view-calendar .selection-toolbar .selection-count{font-size:.72rem;color:var(--text-secondary);}
+#view-calendar .selection-toolbar .hidden{display:none!important;}
+#view-calendar .selection-toolbar .btn-paid{background:#509F54;color:#fff;border-color:#509F54;}
 #view-calendar .student-card .card-header {
   font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   display: flex; align-items: center; gap: 3px;
@@ -392,6 +403,23 @@ body{
   cursor: pointer; border: 2px solid transparent; transition: transform 0.1s;
 }
 #view-calendar .color-swatch.selected { border-color: var(--text); transform: scale(1.1); }
+
+#view-calendar .student-settings-list{display:flex;flex-direction:column;gap:10px;}
+#view-calendar .student-settings-row{padding:10px;border:1px solid var(--border-color);border-radius:8px;background:var(--input-bg);}
+#view-calendar .student-settings-fields{display:grid;grid-template-columns:1fr .7fr auto;gap:6px;align-items:center;}
+#view-calendar .student-schedule-editor{display:flex;flex-direction:column;gap:5px;margin-top:7px;}
+#view-calendar .student-schedule-slot{display:grid;grid-template-columns:1fr .8fr auto;gap:5px;align-items:center;}
+#view-calendar .student-schedule-slot select,#view-calendar .student-schedule-slot input{min-width:0;padding:6px;border:1px solid var(--input-border);border-radius:5px;background:var(--input-bg);color:var(--text-secondary);font-size:.72rem;}
+#view-calendar .student-schedule-add{align-self:flex-start;padding:4px 8px;border:1px dashed var(--primary);border-radius:5px;background:transparent;color:var(--primary);font-size:.68rem;cursor:pointer;}
+#view-calendar .student-schedule-remove{padding:4px 7px;border:0;border-radius:5px;background:#f2d9e2;color:#9f5074;cursor:pointer;}
+#view-calendar .student-settings-actions{display:flex;gap:6px;margin-top:7px;}
+#view-calendar .student-manager-toggle{width:100%;display:flex;justify-content:space-between;align-items:center;padding:9px 10px;border:1px solid var(--border-color);border-radius:7px;background:var(--input-bg);color:var(--text);font-weight:700;cursor:pointer;}
+#view-calendar .student-settings-row.is-editing{box-shadow:0 0 0 2px rgba(123,77,162,.18);}
+#view-calendar .student-settings-row input:disabled{opacity:.75;cursor:not-allowed;}
+#view-calendar .student-settings-day:disabled{opacity:.65;cursor:not-allowed;}
+#view-calendar .student-help-btn{width:20px;height:20px;padding:0;border:1px solid var(--primary);border-radius:50%;background:transparent;color:var(--primary);font-weight:700;cursor:pointer;}
+#view-calendar .student-help-text{margin-top:6px;padding:7px 9px;border-radius:6px;background:var(--input-bg);color:var(--text-secondary);font-size:.72rem;line-height:1.35;}
+#view-finance .schedule-change-notice{margin-top:10px;padding:9px 11px;border:1px solid #e7a23b;border-radius:8px;background:rgba(255,193,7,.12);color:var(--text);font-size:.76rem;line-height:1.35;}
 
 #view-calendar .btn { padding: 10px 15px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 0.9rem; }
 #view-calendar .btn-primary { background: var(--primary); color: white; }
@@ -882,6 +910,12 @@ body{
         <button class="icon-btn" id="settingsBtn" title="Настройки">⚙️</button>
       </div>
     </div>
+    <div class="selection-toolbar">
+      <button class="btn btn-secondary" type="button" id="selectLessonsBtn">☑ Выбрать уроки</button>
+      <button class="btn btn-paid hidden" type="button" id="markSelectedPaidBtn">✓ Отметить оплаченными</button>
+      <button class="btn btn-danger hidden" type="button" id="deleteSelectedBtn">🗑 Удалить выбранные</button>
+      <span class="selection-count" id="selectionCount"></span>
+    </div>
     <div class="month-navigation">
       <button class="nav-btn" id="prevMonth">‹</button>
       <div class="month-selector-wrapper">
@@ -912,8 +946,13 @@ body{
           ✨ При сохранении создастся серия. План и ДЗ сохранятся <b>только для этого дня</b>.
         </div>
         <div class="form-group">
-          <label>Ученик</label>
+          <label style="display:flex;align-items:center;gap:6px;">Ученик <button type="button" class="student-help-btn" id="studentHelpBtn" title="Как заполнять ученика">?</button></label>
           <input type="text" id="studentName" placeholder="Имя ученика">
+          <div class="student-help-text hidden" id="studentHelpText">Сначала укажите имя, расписание, время и стоимость одного урока. После сохранения календарь предложит создать общую финансовую карточку.</div>
+        </div>
+        <div class="form-group">
+          <label>Стоимость одного урока, ₽</label>
+          <input type="number" id="lessonRate" min="0" step="1" placeholder="например, 1500">
         </div>
         <div class="form-group">
           <label>Расписание (можно несколько слотов)</label>
@@ -1001,6 +1040,8 @@ body{
       <div class="pattern-section-title">Своя картинка</div>
       <input type="file" id="bgUpload" accept="image/*" style="margin-bottom: 8px;">
       <button class="btn btn-secondary" id="clearBg" style="width: 100%;">Сбросить фон</button>
+      <button type="button" class="student-manager-toggle" id="studentManagerToggle"><span>👥 Управление учениками</span><span id="studentManagerChevron">▼</span></button>
+      <div id="studentSettingsList" class="student-settings-list"></div>
     </div>
   </div>
 
@@ -1100,6 +1141,7 @@ body{
       <h1>Трекер оплат репетитора Greens</h1>
       <div class="header-actions">
         <button class="btn ghost tiny" onclick="undoFinance()" id="undoFinanceBtn" title="Отменить последнее действие">↶ Отменить</button>
+        <button class="btn ghost tiny" type="button" onclick="openStudentEditor()">⚙️ Ученики</button>
         <button class="btn ghost tiny" onclick="exportData()">⬇ Export</button>
         <button class="btn ghost tiny" onclick="importData()">⬆ Import</button>
         <input type="file" id="importFile" accept=".json,application/json" style="display:none" onchange="handleImportFile(event)">
@@ -1110,6 +1152,7 @@ body{
       <span>Помочь репетиторам вести финансы и учёт уроков без хаоса</span>
       <span>➕ Создайте карточку ученика → 💳 Внесите абонемент: укажите дату начала и кол-во уроков → 📅 Построится ровно столько уроков, сколько оплачено → 📊 Смотрите отчёт и 🗒️ ведите заметки.</span>
     </div>
+    <div class="info-note finance-schedule-notice">ℹ️ Если в редакторе изменены дни или время, старые даты в финансах сохраняются. Следующий абонемент будет построен уже по новому расписанию; при необходимости старые уроки перенесите вручную.</div>
   </header>
 
   <div class="layout">
@@ -1356,6 +1399,13 @@ body{
   const exportMonthSelect = document.getElementById('exportMonthSelect');
   const exportAllBtn = document.getElementById('exportAllBtn');
   const exportMonthBtn = document.getElementById('exportMonthBtn');
+  const selectLessonsBtn = document.getElementById('selectLessonsBtn');
+  const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+  const markSelectedPaidBtn = document.getElementById('markSelectedPaidBtn');
+  const selectionCount = document.getElementById('selectionCount');
+  const studentSettingsList = document.getElementById('studentSettingsList');
+  const studentManagerToggle = document.getElementById('studentManagerToggle');
+  const studentManagerChevron = document.getElementById('studentManagerChevron');
 
   const moveCard = document.getElementById('moveCard');
   const closeMove = document.getElementById('closeMove');
@@ -1379,6 +1429,9 @@ body{
   let moveLessonId = null;
   let moveLessonDate = null;
   let dragData = null;
+  let selectionMode = false;
+  const selectedLessonIds = new Set();
+  let studentManagerExpanded = true;
 
   const COLORS = ['#4CAF50','#2196F3','#FF9800','#E91E63','#9C27B0','#00BCD4','#795548','#607D8B'];
   const SUBSCRIPTION_COLORS = ['#4CAF50','#2196F3','#00BCD4','#FF9800','#E91E63','#9C27B0','#795548','#607D8B'];
@@ -1706,6 +1759,10 @@ body{
             lesson.financeStudentId === student.id && lesson.financeLessonId === financeLesson.id
           );
 
+          const ignoredAfterScheduleEdit = Array.isArray(student.calendarIgnoredLessonIds) &&
+            student.calendarIgnoredLessonIds.includes(financeLesson.id);
+          if(!calendarLesson && ignoredAfterScheduleEdit) return;
+
           if(!calendarLesson){
             calendarLesson = nextLessons.find(lesson =>
               lesson.name.trim().toLocaleLowerCase() === String(student.name).trim().toLocaleLowerCase() &&
@@ -1724,7 +1781,7 @@ body{
               id: syncId(),
               seriesId: null,
               date: financeLesson.date,
-              time: template.time || '20:00',
+              time: student.time || template.time || '20:00',
               name: student.name,
               plan: '', homeworkGiven: '', homeworkLink: '', homeworkNext: '',
               link: template.link || '', color: financeColor,
@@ -1736,7 +1793,10 @@ body{
           } else {
             calendarLesson.financeStudentId = student.id;
             calendarLesson.financeLessonId = financeLesson.id;
+            delete calendarLesson.calendarOnly;
+            delete calendarLesson.calendarOnlyAfterScheduleEdit;
             calendarLesson.date = financeLesson.date;
+            if(student.time) calendarLesson.time = student.time;
             calendarLesson.color = financeColor;
             if(sourceCalendarLesson && !calendarLesson.time) calendarLesson.time = sourceCalendarLesson.time;
           }
@@ -1761,7 +1821,51 @@ body{
     }
   }
 
+  window.updateCalendarStudentDetails = function(id, oldName, changes){
+    const oldKey = String(oldName || '').trim().toLocaleLowerCase();
+    const todayKey = new Date().toISOString().slice(0,10);
+    const matches = lessons.filter(lesson => {
+      const lessonKey = String(lesson.name || '').trim().toLocaleLowerCase();
+      return lesson.financeStudentId === id || (!lesson.financeStudentId && lessonKey === oldKey);
+    });
+    const future = matches.filter(lesson => lesson.date >= todayKey);
+    const template = future[0] || matches[0] || {};
+    lessons = lessons.filter(lesson => !future.includes(lesson));
+
+    if(changes.reschedule && Array.isArray(changes.days) && changes.days.length > 0){
+      // Keep the calendar plan useful for the same planning horizon as the
+      // regular calendar series. Existing financial dates were removed above
+      // only from the calendar view and remain protected in Finance.
+      const endDate = new Date(todayKey + 'T00:00:00');
+      endDate.setMonth(endDate.getMonth() + 3);
+      const cursor = new Date(todayKey + 'T00:00:00');
+      const seriesId = 'settings_' + Date.now();
+      while(cursor <= endDate){
+        const dayName = DAYS_SHORT[(cursor.getDay() + 6) % 7];
+        const slots = Array.isArray(changes.scheduleSlots) && changes.scheduleSlots.length
+          ? changes.scheduleSlots.filter(slot => slot.day === dayName && slot.time)
+          : (changes.days.includes(dayName) ? [{day: dayName, time: changes.time || template.time || '20:00'}] : []);
+        slots.forEach(slot => {
+          const date = `${cursor.getFullYear()}-${String(cursor.getMonth()+1).padStart(2,'0')}-${String(cursor.getDate()).padStart(2,'0')}`;
+          lessons.push({
+            id: syncId(), seriesId, date,
+            time: slot.time || '20:00',
+            name: changes.name, rate: Number(changes.rate) || 0,
+            plan:'', homeworkGiven:'', homeworkLink:'', homeworkNext:'',
+            link: template.link || '', color: template.color || '#4CAF50',
+            emoji: template.emoji || '📚', financeStudentId: id,
+            calendarOnlyAfterScheduleEdit: true
+          });
+        });
+        cursor.setDate(cursor.getDate() + 1);
+      }
+    }
+    localStorage.setItem('tutorLessonsPro', JSON.stringify(lessons));
+    renderCalendar();
+  };
+
   function calendarFinanceBadge(lesson){
+    if(lesson.manualPaid) return '<span class="finance-status paid">✓ оплачено</span>';
     if(typeof window.getFinanceCalendarStatus !== 'function') return '';
     const status = window.getFinanceCalendarStatus(lesson, lessons);
     if(!status) return '';
@@ -1773,6 +1877,61 @@ body{
     };
     const item = labels[status.key];
     return item ? `<span class="finance-status ${item[0]}">${item[1]}</span>` : '';
+  }
+
+  function updateSelectionToolbar(){
+    const count = selectedLessonIds.size;
+    if(selectionCount) selectionCount.textContent = selectionMode ? `Выбрано: ${count}` : '';
+    if(markSelectedPaidBtn) markSelectedPaidBtn.classList.toggle('hidden', !selectionMode || count === 0);
+    if(deleteSelectedBtn) deleteSelectedBtn.classList.toggle('hidden', !selectionMode || count === 0);
+    if(selectLessonsBtn) selectLessonsBtn.textContent = selectionMode ? '✕ Завершить выбор' : '☑ Выбрать уроки';
+  }
+
+  function toggleLessonSelection(lessonId){
+    if(selectedLessonIds.has(lessonId)) selectedLessonIds.delete(lessonId);
+    else selectedLessonIds.add(lessonId);
+    updateSelectionToolbar();
+    renderCalendar();
+  }
+
+  function markSelectedLessonsPaid(){
+    if(selectedLessonIds.size === 0) return;
+    const selected = lessons.filter(lesson => selectedLessonIds.has(lesson.id));
+    if(!selected.length) return;
+    pushUndo(`Ручная отметка оплаченных уроков (${selected.length})`);
+    selected.forEach(lesson => {
+      // Visual/manual bookkeeping only. It does not create or alter a
+      // Finance subscription and therefore cannot affect income calculations.
+      lesson.manualPaid = true;
+    });
+    saveToStorage();
+    renderCalendar();
+  }
+
+  function removeCalendarLessonsForStudent(studentId){
+    const removed = lessons.filter(lesson => lesson.financeStudentId === studentId);
+    if(!removed.length) return;
+    removed.forEach(lesson => selectedLessonIds.delete(lesson.id));
+    lessons = lessons.filter(lesson => lesson.financeStudentId !== studentId);
+    saveToStorage();
+    renderCalendar();
+  }
+  window.removeCalendarLessonsForStudent = removeCalendarLessonsForStudent;
+
+  function deleteSelectedLessons(){
+    if(selectedLessonIds.size === 0) return;
+    const selected = lessons.filter(lesson => selectedLessonIds.has(lesson.id));
+    if(!confirm(`Удалить выбранные уроки (${selected.length})?`)) return;
+    pushUndo(`Удаление уроков (${selected.length})`);
+    if(typeof window.removeFinanceLessonsForCalendar === 'function'){
+      window.removeFinanceLessonsForCalendar(selected);
+    }
+    lessons = lessons.filter(lesson => !selectedLessonIds.has(lesson.id));
+    selectedLessonIds.clear();
+    selectionMode = false;
+    saveToStorage();
+    updateSelectionToolbar();
+    renderCalendar();
   }
 
   // === РЕНДЕР КАЛЕНДАРЯ ===
@@ -1811,6 +1970,7 @@ body{
       dayLessons.forEach(lesson => {
         const card = document.createElement('div');
         card.className = 'student-card';
+        if(selectedLessonIds.has(lesson.id)) card.classList.add('lesson-selected');
         const hasContent = lesson.plan || lesson.homeworkGiven || lesson.homeworkNext;
         if(hasContent) card.classList.add('has-content');
         card.style.backgroundColor = lesson.color + '30';
@@ -1827,7 +1987,11 @@ body{
           <div class="card-sub">${lesson.time || '--:--'}</div>
           ${calendarFinanceBadge(lesson)}
         `;
-        card.onclick = (e) => { e.stopPropagation(); openModal(lesson, dateStr); };
+        card.onclick = (e) => {
+          e.stopPropagation();
+          if(selectionMode) toggleLessonSelection(lesson.id);
+          else openModal(lesson, dateStr);
+        };
 
         card.addEventListener('dragstart', (e) => {
           e.stopPropagation();
@@ -1932,6 +2096,7 @@ body{
       editingId = lesson.id; currentSeriesId = lesson.seriesId;
       document.getElementById('modalTitle').textContent = 'Редактирование урока';
       document.getElementById('studentName').value = lesson.name;
+      document.getElementById('lessonRate').value = lesson.rate || '';
       document.getElementById('lessonPlan').value = lesson.plan || '';
       document.getElementById('homeworkGiven').value = lesson.homeworkGiven || '';
       document.getElementById('homeworkLink').value = lesson.homeworkLink || '';
@@ -1955,6 +2120,7 @@ body{
       editingId = null; currentSeriesId = null;
       document.getElementById('modalTitle').textContent = 'Новый ученик';
       document.getElementById('studentName').value = '';
+      document.getElementById('lessonRate').value = '';
       document.getElementById('lessonPlan').value = '';
       document.getElementById('homeworkGiven').value = '';
       document.getElementById('homeworkLink').value = '';
@@ -2008,6 +2174,7 @@ body{
   saveBtn.onclick = () => {
     const name = document.getElementById('studentName').value.trim();
     if(!name){ alert('Введите имя ученика'); return; }
+    const lessonRate = parseFloat(document.getElementById('lessonRate').value) || 0;
     const formData = {
       name, plan: document.getElementById('lessonPlan').value,
       homeworkGiven: document.getElementById('homeworkGiven').value,
@@ -2015,7 +2182,8 @@ body{
       homeworkNext: document.getElementById('homeworkNext').value,
       link: document.getElementById('lessonLink').value,
       color: selectedColor,
-      emoji: lessonEmojiInput.value.trim()
+      emoji: lessonEmojiInput.value.trim(),
+      rate: lessonRate
     };
     if(editingId){
       pushUndo(`Изменение урока «${name}»`);
@@ -2058,12 +2226,12 @@ body{
               if(!exists){
                 const isInitialDay = (dateStr === selectedDate);
                 const cardData = isInitialDay ? formData : {
-                  name: formData.name, color: formData.color, link: formData.link,
+                  name: formData.name, color: formData.color, link: formData.link, rate: formData.rate,
                   emoji: formData.emoji, plan: '', homeworkGiven: '', homeworkLink: '', homeworkNext: ''
                 };
                 lessons.push({
                   id: Date.now().toString() + Math.random().toString(36).substr(2,5),
-                  seriesId, date: dateStr, time, ...cardData
+                  seriesId, date: dateStr, time, calendarOnly: true, ...cardData
                 });
                 totalCreated++;
               }
@@ -2072,6 +2240,29 @@ body{
         }
       });
       if(!createdAny){ alert('Не удалось создать уроки'); return; }
+      if(typeof window.ensureFinanceStudentFromCalendar === 'function'){
+        const createdDates = lessons.filter(lesson => lesson.seriesId && lesson.seriesId.startsWith(seriesGroupId)).map(lesson => lesson.date);
+        const firstSlot = previewData[0];
+        const financeStudent = window.ensureFinanceStudentFromCalendar({
+          name,
+          days: previewData.flatMap(item => item.days.map(day => ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'][day])),
+          time: firstSlot.time,
+          scheduleSlots: previewData.flatMap(item => item.days.map(day => ({
+            day: ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'][day],
+            time: item.time
+          }))),
+          rate: lessonRate,
+          startDate: createdDates.sort()[0] || selectedDate || todayISO()
+        });
+        if(financeStudent){
+          lessons.forEach(lesson => {
+            if(lesson.seriesId && lesson.seriesId.startsWith(seriesGroupId)){
+              lesson.financeStudentId = financeStudent.id;
+              lesson.calendarOnly = true;
+            }
+          });
+        }
+      }
     }
     saveToStorage(); renderCalendar(); closeModals();
   };
@@ -2096,6 +2287,9 @@ body{
   };
 
   clearEmojiBtn.onclick = () => { lessonEmojiInput.value = ''; };
+  document.getElementById('studentHelpBtn').onclick = () => {
+    document.getElementById('studentHelpText').classList.toggle('hidden');
+  };
   addSlotBtn.onclick = () => { scheduleSlotsContainer.appendChild(createSlotElement(null, '', true)); };
 
   document.querySelectorAll('#view-calendar .tab-btn').forEach(btn => {
@@ -2142,17 +2336,149 @@ body{
     renderCalendar();
   };
 
+  function renderStudentSettings(){
+    if(!studentSettingsList) return;
+    studentSettingsList.classList.toggle('hidden', !studentManagerExpanded);
+    if(studentManagerChevron) studentManagerChevron.textContent = studentManagerExpanded ? '▲' : '▼';
+    const students = typeof window.getFinanceStudents === 'function'
+      ? window.getFinanceStudents() : [];
+    studentSettingsList.innerHTML = '';
+    if(students.length === 0){
+      studentSettingsList.innerHTML = '<div class="info-note">Ученики пока не добавлены.</div>';
+      return;
+    }
+    students.forEach(student => {
+      const row = document.createElement('div');
+      row.className = 'student-settings-row';
+      let editing = false;
+      const fields = document.createElement('div');
+      fields.className = 'student-settings-fields';
+      const nameInput = document.createElement('input');
+      nameInput.value = student.name || '';
+      nameInput.placeholder = 'Имя ученика';
+      nameInput.disabled = true;
+      const rateInput = document.createElement('input');
+      rateInput.type = 'number'; rateInput.min = '0'; rateInput.value = student.rate || 0;
+      rateInput.placeholder = 'Ставка';
+      rateInput.disabled = true;
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button'; editBtn.className = 'btn btn-secondary'; editBtn.textContent = '✏️'; editBtn.title = 'Редактировать ученика';
+      fields.append(nameInput, rateInput, editBtn);
+      row.appendChild(fields);
+
+      const scheduleEditor = document.createElement('div');
+      scheduleEditor.className = 'student-schedule-editor';
+      const scheduleSlots = (Array.isArray(student.scheduleSlots) && student.scheduleSlots.length)
+        ? student.scheduleSlots.map(slot => ({day: slot.day, time: slot.time || ''}))
+        : (student.days || []).map(day => ({day, time: student.time || ''}));
+      const renderScheduleSlots = () => {
+        scheduleEditor.innerHTML = '';
+        scheduleSlots.forEach((slot, index) => {
+          const slotRow = document.createElement('div');
+          slotRow.className = 'student-schedule-slot';
+          const daySelect = document.createElement('select');
+          DAYS_SHORT.forEach(day => {
+            const option = document.createElement('option');
+            option.value = day; option.textContent = day; option.selected = day === slot.day;
+            daySelect.appendChild(option);
+          });
+          const slotTime = document.createElement('input');
+          slotTime.type = 'time'; slotTime.value = slot.time || '';
+          const removeSlot = document.createElement('button');
+          removeSlot.type = 'button'; removeSlot.className = 'student-schedule-remove';
+          removeSlot.textContent = '×'; removeSlot.title = 'Удалить слот';
+          removeSlot.disabled = !editing;
+          daySelect.disabled = !editing; slotTime.disabled = !editing;
+          daySelect.onchange = () => { slot.day = daySelect.value; };
+          slotTime.onchange = () => { slot.time = slotTime.value; };
+          removeSlot.onclick = () => { scheduleSlots.splice(index, 1); renderScheduleSlots(); };
+          slotRow.append(daySelect, slotTime, removeSlot);
+          scheduleEditor.appendChild(slotRow);
+        });
+        const addSlot = document.createElement('button');
+        addSlot.type = 'button'; addSlot.className = 'student-schedule-add';
+        addSlot.textContent = '+ Добавить день и время'; addSlot.disabled = !editing;
+        addSlot.onclick = () => {
+          scheduleSlots.push({day: 'Пн', time: student.time || '18:00'});
+          renderScheduleSlots();
+        };
+        scheduleEditor.appendChild(addSlot);
+      };
+      renderScheduleSlots();
+      row.appendChild(scheduleEditor);
+
+      const actions = document.createElement('div');
+      actions.className = 'student-settings-actions';
+      const saveBtn = document.createElement('button');
+      saveBtn.type = 'button'; saveBtn.className = 'btn btn-primary hidden'; saveBtn.textContent = 'Применить изменения';
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button'; deleteBtn.className = 'btn btn-danger hidden'; deleteBtn.textContent = 'Удалить';
+      const setEditing = value => {
+        editing = value;
+        row.classList.toggle('is-editing', editing);
+        [nameInput, rateInput].forEach(input => input.disabled = !editing);
+        row.querySelectorAll('.student-schedule-slot select, .student-schedule-slot input, .student-schedule-remove, .student-schedule-add').forEach(control => control.disabled = !editing);
+        saveBtn.classList.toggle('hidden', !editing);
+        deleteBtn.classList.toggle('hidden', !editing);
+        editBtn.classList.toggle('hidden', editing);
+      };
+      editBtn.onclick = () => setEditing(true);
+      saveBtn.onclick = () => {
+        if(!nameInput.value.trim()){ alert('Введите имя ученика'); return; }
+        const validSlots = scheduleSlots.filter(slot => slot.day && slot.time);
+        if(validSlots.length === 0){ alert('Добавьте хотя бы один день и время'); return; }
+        if(typeof window.updateFinanceStudent === 'function'){
+          window.updateFinanceStudent(student.id, {
+            name: nameInput.value.trim(),
+            rate: parseFloat(rateInput.value) || 0,
+            days: Array.from(new Set(validSlots.map(slot => slot.day))),
+            time: validSlots[0].time,
+            scheduleSlots: validSlots
+          });
+        }
+        renderStudentSettings();
+      };
+      deleteBtn.onclick = () => {
+        if(typeof window.deleteStudent === 'function') window.deleteStudent(student.id);
+        renderStudentSettings();
+      };
+      actions.appendChild(saveBtn);
+      actions.appendChild(deleteBtn);
+      row.appendChild(actions);
+      studentSettingsList.appendChild(row);
+    });
+  }
+
+  if(studentManagerToggle){
+    studentManagerToggle.onclick = () => {
+      studentManagerExpanded = !studentManagerExpanded;
+      renderStudentSettings();
+    };
+  }
+
   themeToggle.onclick = () => {
     currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
     localStorage.setItem('tutorTheme', currentTheme);
     applyTheme();
   };
 
-  settingsBtn.onclick = () => {
-    renderPatternGrid(); applySize();
+  window.openStudentEditor = () => {
+    const calendarTab = document.getElementById('tab-calendar');
+    if(calendarTab) calendarTab.click();
+    renderPatternGrid(); applySize(); renderStudentSettings();
     settingsCard.classList.add('active');
     overlay.classList.add('active');
   };
+  settingsBtn.onclick = window.openStudentEditor;
+
+  selectLessonsBtn.onclick = () => {
+    selectionMode = !selectionMode;
+    if(!selectionMode) selectedLessonIds.clear();
+    updateSelectionToolbar();
+    renderCalendar();
+  };
+  deleteSelectedBtn.onclick = deleteSelectedLessons;
+  if(markSelectedPaidBtn) markSelectedPaidBtn.onclick = markSelectedLessonsPaid;
 
   bgUpload.onchange = (e) => {
     const file = e.target.files[0];
@@ -2173,8 +2499,9 @@ body{
   };
 
   addFab.onclick = () => {
-    const todayStr = `${currentYear}-${String(currentMonth + 1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
-    openModal(null, todayStr);
+    // A new series must not inherit today's weekday silently. The schedule
+    // is shared with Finance, so only explicitly selected weekdays are saved.
+    openModal(null, null);
   };
 
   closeModalBtn.onclick = closeModals;
@@ -2520,6 +2847,25 @@ body{
         );
         if(!student) return;
 
+        // A calendar plan is a schedule template, not a financial lesson.
+        // It becomes a finance lesson only when an abonement is paid and the
+        // finance side creates/links the corresponding lesson by ID/date.
+        if((calendarLesson.calendarOnly || calendarLesson.calendarOnlyAfterScheduleEdit) && !calendarLesson.financeLessonId){
+          if(calendarLesson.name !== student.name){
+            calendarLesson.name = student.name;
+            changed = true;
+          }
+          if(Number(calendarLesson.rate) > 0 && Number(student.rate) === 0){
+            student.rate = Number(calendarLesson.rate);
+            changed = true;
+          }
+          if(!student.time && calendarLesson.time){
+            student.time = calendarLesson.time;
+            changed = true;
+          }
+          return;
+        }
+
         let financeLesson = Array.isArray(student.lessons)
           ? student.lessons.find(lesson => lesson.id === calendarLesson.financeLessonId)
           : null;
@@ -2556,6 +2902,18 @@ body{
           financeLesson.calendarLessonId = calendarLesson.id;
           changed = true;
         }
+        if(calendarLesson.name !== student.name){
+          calendarLesson.name = student.name;
+          changed = true;
+        }
+        if(!student.time && calendarLesson.time){
+          student.time = calendarLesson.time;
+          changed = true;
+        }
+        if(Number(calendarLesson.rate) > 0 && Number(student.rate) === 0){
+          student.rate = Number(calendarLesson.rate);
+          changed = true;
+        }
 
         if(!student.scheduleStart || calendarLesson.date < student.scheduleStart){
           student.scheduleStart = calendarLesson.date;
@@ -2574,6 +2932,84 @@ body{
   }
 
   window.syncCalendarToFinance = syncCalendarToFinance;
+
+  window.ensureFinanceStudentFromCalendar = function(data){
+    const name = String(data && data.name || '').trim();
+    if(!name) return null;
+    const existing = state.students.find(student => normalizeStudentName(student.name) === normalizeStudentName(name));
+    if(existing){
+      let changed = false;
+      const nextDays = Array.from(new Set(data.days || [])).filter(Boolean);
+      const nextSlots = Array.from(new Map(
+        (Array.isArray(data.scheduleSlots) ? data.scheduleSlots : [])
+          .filter(slot => slot && slot.day && slot.time)
+          .map(slot => [`${slot.day}|${slot.time}`, {day: slot.day, time: slot.time}])
+      ).values());
+      if(Number(data.rate) > 0 && Number(existing.rate) !== Number(data.rate)){
+        existing.rate = Number(data.rate);
+        changed = true;
+      }
+      if(nextDays.length && JSON.stringify(existing.days || []) !== JSON.stringify(nextDays)){
+        existing.days = nextDays;
+        changed = true;
+      }
+      if(nextSlots.length && JSON.stringify(existing.scheduleSlots || []) !== JSON.stringify(nextSlots)){
+        existing.scheduleSlots = nextSlots;
+        changed = true;
+      }
+      if(data.time && existing.time !== data.time){
+        existing.time = data.time;
+        changed = true;
+      }
+      if(changed){ save(); render(); }
+      return existing;
+    }
+    const shouldCreate = confirm(`Создать финансовую карточку для ученика «${name}»?\n\nЭто свяжет календарь и финансы в одну систему.`);
+    if(!shouldCreate) return null;
+    const student = {
+      id: uid(), name, rate: Number(data.rate) || 0,
+      days: Array.from(new Set(data.days || [])),
+      time: data.time || '',
+      payments: [], lessons: [], balance: 0,
+      scheduleSlots: Array.from(new Map(
+        (Array.isArray(data.scheduleSlots) ? data.scheduleSlots : [])
+          .filter(slot => slot && slot.day && slot.time)
+          .map(slot => [`${slot.day}|${slot.time}`, {day: slot.day, time: slot.time}])
+      ).values()),
+      scheduleStart: data.startDate || null
+    };
+    state.students.push(student);
+    save();
+    render();
+    renderDays();
+    return student;
+  };
+
+  window.getFinanceStudents = function(){
+    return state.students.map(student => ({
+      id: student.id, name: student.name, rate: student.rate,
+      days: Array.isArray(student.days) ? [...student.days] : [],
+      time: student.time || ''
+    }));
+  };
+
+  window.removeFinanceLessonsForCalendar = function(calendarLessons){
+    const ids = new Set((calendarLessons || []).flatMap(lesson => [lesson.financeLessonId, lesson.id]).filter(Boolean));
+    if(ids.size === 0) return;
+    syncingFromCalendar = true;
+    try{
+      state.students.forEach(student => {
+        student.lessons = student.lessons.filter(lesson =>
+          !ids.has(lesson.id) && !ids.has(lesson.calendarLessonId)
+        );
+        recalcLessons(student);
+      });
+      save();
+      render();
+    } finally {
+      syncingFromCalendar = false;
+    }
+  };
 
   function save(){
     const serialized = JSON.stringify(state);
@@ -2646,7 +3082,54 @@ body{
     pushUndo(`Удаление ученика${st ? ' «' + st.name + '»' : ''}`);
     state.students = state.students.filter(s=>s.id!==id);
     delete state.collapsed[id];
+    if(typeof window.removeCalendarLessonsForStudent === 'function'){
+      window.removeCalendarLessonsForStudent(id);
+    }
     save(); render();
+  };
+
+  function rebuildStudentFutureSchedule(student){
+    ensureLessonEntitlements(student);
+    const today = todayISO();
+    const keepStatuses = new Set(['done','cancel','free-move','paid-move']);
+    student.lessons = student.lessons.filter(lesson =>
+      lesson.date < today || keepStatuses.has(lesson.status) ||
+      lesson.generatedByMoveId || lesson.generatedByCancelId
+    );
+    ensurePaidScheduleComplete(student);
+    recalcLessons(student);
+  }
+
+  window.updateFinanceStudent = function(id, changes){
+    const student = state.students.find(item => item.id === id);
+    if(!student) return;
+    const oldName = student.name;
+    pushUndo(`Изменение данных ученика «${student.name}»`);
+    const nextSlots = (Array.isArray(changes.scheduleSlots) && changes.scheduleSlots.length)
+      ? changes.scheduleSlots.map(slot => ({day: slot.day, time: slot.time || ''}))
+      : (changes.days || []).map(day => ({day, time: changes.time || ''}));
+    const daysChanged = JSON.stringify(student.days || []) !== JSON.stringify(changes.days || []);
+    const timeChanged = (student.time || '') !== (changes.time || '') ||
+      JSON.stringify(student.scheduleSlots || []) !== JSON.stringify(nextSlots);
+    if(daysChanged || timeChanged){
+      const today = todayISO();
+      student.calendarIgnoredLessonIds = student.lessons
+        .filter(lesson => lesson.date >= today)
+        .map(lesson => lesson.id);
+    }
+    student.name = changes.name;
+    student.rate = Number(changes.rate) || 0;
+    student.days = [...(changes.days || [])];
+    student.time = changes.time || (nextSlots[0] && nextSlots[0].time) || '';
+    student.scheduleSlots = nextSlots;
+    if(typeof window.updateCalendarStudentDetails === 'function'){
+      window.updateCalendarStudentDetails(id, oldName, {
+        name: student.name, rate: student.rate, time: student.time,
+        days: student.days, time: student.time,
+        scheduleSlots: student.scheduleSlots, reschedule: daysChanged || timeChanged
+      });
+    }
+    save(); render(); renderDays();
   };
 
   window.toggleCard = function(id){
@@ -2757,7 +3240,6 @@ body{
       }
     });
   }
-
 
   // One paid unit must always have one logical entitlement. Historical rows
   // created by a move/cancellation belong to the original entitlement and
@@ -3233,6 +3715,7 @@ body{
               entitlements: blockGroups.length
             });
           }
+
         });
 
         const beyondGroups = lessonGroups.filter(group => !usedGroups.has(group));
@@ -3253,7 +3736,10 @@ body{
             ? block.groups.flatMap(group =>
                 group.lessons.map(lesson => ({
                   lesson,
-                  number: lessonGroups.indexOf(group) + 1
+                  // Lesson numbers belong to the subscription block, not to
+                  // the student's entire history. Every new abonement starts
+                  // at 1 and ends at the number of paid lessons in it.
+                  number: block.groups.indexOf(group) + 1
                 }))
               ).sort((a,b) => `${a.lesson.date} ${a.lesson.id}`.localeCompare(`${b.lesson.date} ${b.lesson.id}`))
             : (block.lessons || []).map((lesson, index) => ({ lesson, number: index + 1 }));
@@ -3667,3 +4153,4 @@ body{
 
 </body>
 </html>
+
