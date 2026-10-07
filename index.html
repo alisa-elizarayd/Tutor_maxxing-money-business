@@ -2448,6 +2448,7 @@ body{
   let state = { students: [], notes: [], selectedDays: [], collapsed: {} };
   let editingNoteId = null;
   let activeFormat = {bold:false, italic:false, underline:false, color:'#2b2430'};
+  let syncingFromCalendar = false;
 
   const UNDO_LIMIT = 20;
   let undoStack = [];
