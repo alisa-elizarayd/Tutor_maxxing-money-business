@@ -2757,6 +2757,51 @@ body{
     });
   }
 
+
+  // One paid unit must always have one logical entitlement. Historical rows
+  // created by a move/cancellation belong to the original entitlement and
+  // must not reduce the number of future paid lessons. If old data contains
+  // fewer logical entitlements than the payments promise, append only the
+  // missing future dates.
+  function ensurePaidScheduleComplete(student){
+    ensureLessonEntitlements(student);
+    const totalPaid = student.payments.reduce((sum,p)=>sum + (Number(p.lessons) || 0), 0);
+    let groups = getEntitlementGroups(student);
+    if(groups.length >= totalPaid) return;
+
+    const occupied = new Set(student.lessons.map(lesson => lesson.date));
+    const latest = student.lessons.reduce((max, lesson) => lesson.date > max ? lesson.date : max, '');
+    let cursor = latest || student.scheduleStart || todayISO();
+    const sortedPayments = [...student.payments].sort((a,b)=>(a.startDate||'').localeCompare(b.startDate||''));
+    const paymentForIndex = index => {
+      let offset = 0;
+      for(const payment of sortedPayments){
+        offset += Number(payment.lessons) || 0;
+        if(index < offset) return payment;
+      }
+      return sortedPayments[sortedPayments.length - 1] || null;
+    };
+
+    let guard = 0;
+    while(groups.length < totalPaid && guard < 3660){
+      guard++;
+      const date = new Date(cursor + 'T00:00:00');
+      date.setDate(date.getDate() + 1);
+      cursor = toISO(date);
+      const weekday = DAYS[(date.getDay()+6)%7];
+      if(!student.days.includes(weekday) || occupied.has(cursor)) continue;
+
+      const payment = paymentForIndex(groups.length);
+      student.lessons.push({
+        id: uid(), date: cursor, status: 'planned', movedFrom: null,
+        paymentId: payment ? payment.id : null, entitlementId: uid()
+      });
+      occupied.add(cursor);
+      groups = getEntitlementGroups(student);
+    }
+    student.lessons.sort((a,b)=>a.date.localeCompare(b.date));
+  }
+
   function recalcLessons(student){
     const today = todayISO();
     ensureLessonEntitlements(student);
@@ -3136,6 +3181,7 @@ body{
     }
     state.students.forEach(s=>{
       ensurePaymentColors(s);
+      if(s.scheduleStart) ensurePaidScheduleComplete(s);
       if(s.scheduleStart) recalcLessons(s);
     });
     const box = document.getElementById('students');
@@ -3156,31 +3202,20 @@ body{
       } else if(s.lessons.length === 0){
         lessonsHTML = '<div class="empty">Нет уроков</div>';
       } else {
-        // Group visual rows by stable paid entitlement IDs.
-        // Original lesson + any number of free-move replacements = one group.
-        const entitlementGroups = new Map();
-        s.lessons.forEach(l => {
-          if(!l.entitlementId) return;
-          if(!entitlementGroups.has(l.entitlementId)) entitlementGroups.set(l.entitlementId, []);
-          entitlementGroups.get(l.entitlementId).push(l);
-        });
-
-        const lessonGroups = [...entitlementGroups.entries()]
-          .map(([entitlementId, lessons]) => ({
-            entitlementId,
-            lessons: lessons.sort((a,b)=>a.date.localeCompare(b.date)),
-            source: lessons.find(l => !l.generatedByMoveId) || lessons[0],
-            entitlementCount: 1
-          }))
+        // Group visual rows by stable paid entitlement IDs. An original row
+        // and every move/cancellation replacement stay one logical lesson.
+        const lessonGroups = getEntitlementGroups(s)
           .sort((a,b)=>a.source.date.localeCompare(b.source.date));
 
         const sortedPayments = [...s.payments].sort((a,b) => (a.startDate||'').localeCompare(b.startDate||''));
-        let cursor = 0;
         const blocks = [];
+        const usedGroups = new Set();
 
         sortedPayments.forEach((p, idx) => {
-          const count = p.lessons;
-          const blockGroups = lessonGroups.slice(cursor, cursor + count);
+          const blockGroups = lessonGroups.filter(group =>
+            group.lessons.some(lesson => lesson.paymentId === p.id)
+          );
+          blockGroups.forEach(group => usedGroups.add(group));
 
           if(blockGroups.length > 0){
             blocks.push({
@@ -3197,29 +3232,28 @@ body{
               entitlements: blockGroups.length
             });
           }
-
-          cursor += count;
         });
 
-        if(cursor < lessonGroups.length){
-          const beyondGroups = lessonGroups.slice(cursor);
-          if(beyondGroups.length > 0){
-            blocks.push({
-              type: 'beyond',
-              groups: beyondGroups,
-              lessons: beyondGroups.flatMap(g => g.lessons)
-                .sort((a,b) => `${a.date} ${a.id}`.localeCompare(`${b.date} ${b.id}`)),
-              entitlements: beyondGroups.length
-            });
-          }
+        const beyondGroups = lessonGroups.filter(group => !usedGroups.has(group));
+        if(beyondGroups.length > 0){
+          blocks.push({
+            type: 'beyond',
+            groups: beyondGroups,
+            lessons: beyondGroups.flatMap(g => g.lessons)
+              .sort((a,b) => `${a.date} ${a.id}`.localeCompare(`${b.date} ${b.id}`)),
+            entitlements: beyondGroups.length
+          });
         }
         if(blocks.length === 0){
           blocks.push({ type: 'beyond', lessons: s.lessons });
         }
         blocks.forEach(block => {
           const numberedLessons = block.groups
-            ? block.groups.flatMap((group, groupIndex) =>
-                group.lessons.map(lesson => ({ lesson, number: groupIndex + 1 }))
+            ? block.groups.flatMap(group =>
+                group.lessons.map(lesson => ({
+                  lesson,
+                  number: lessonGroups.indexOf(group) + 1
+                }))
               ).sort((a,b) => `${a.lesson.date} ${a.lesson.id}`.localeCompare(`${b.lesson.date} ${b.lesson.id}`))
             : (block.lessons || []).map((lesson, index) => ({ lesson, number: index + 1 }));
 
