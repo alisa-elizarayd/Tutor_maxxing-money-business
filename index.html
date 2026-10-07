@@ -622,8 +622,6 @@ body{
 }
 #view-finance .student-title{
   display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none;
-  width:100%;padding:0;border:0;background:transparent;color:inherit;
-  font:inherit;text-align:left;
 }
 #view-finance .chevron{
   color:var(--purple);font-size:11px;transition:transform .15s;
@@ -1381,6 +1379,7 @@ body{
   let dragData = null;
 
   const COLORS = ['#4CAF50','#2196F3','#FF9800','#E91E63','#9C27B0','#00BCD4','#795548','#607D8B'];
+  const SUBSCRIPTION_COLORS = ['#4CAF50','#2196F3','#00BCD4','#FF9800','#E91E63','#9C27B0','#795548','#607D8B'];
 
   function formatTimeInput(raw){
     if(!raw) return '';
@@ -1680,6 +1679,19 @@ body{
     ) || null;
   }
 
+  function subscriptionColor(student, financeLesson){
+    const payments = Array.isArray(student.payments) ? student.payments : [];
+    let index = payments.findIndex(payment => payment.id && payment.id === financeLesson.paymentId);
+    if(index < 0){
+      const paymentStart = financeLesson.date || '';
+      index = payments.findIndex(payment => (payment.startDate || '') <= paymentStart);
+      if(index < 0) index = 0;
+    }
+    return payments[index] && payments[index].color
+      ? payments[index].color
+      : SUBSCRIPTION_COLORS[index % SUBSCRIPTION_COLORS.length];
+  }
+
   function syncFinanceToCalendar(financeStudents){
     if(syncingToFinance || !Array.isArray(financeStudents)) return;
     syncingFromFinance = true;
@@ -1700,6 +1712,7 @@ body{
           }
 
           const sourceCalendarLesson = financeSourceCalendarLesson(student, financeLesson, nextLessons);
+          const financeColor = subscriptionColor(student, financeLesson);
           if(!calendarLesson){
             const sameStudent = nextLessons.filter(lesson =>
               lesson.name.trim().toLocaleLowerCase() === String(student.name).trim().toLocaleLowerCase()
@@ -1712,7 +1725,7 @@ body{
               time: template.time || '20:00',
               name: student.name,
               plan: '', homeworkGiven: '', homeworkLink: '', homeworkNext: '',
-              link: template.link || '', color: template.color || '#9C27B0',
+              link: template.link || '', color: financeColor,
               emoji: template.emoji || '📚',
               financeStudentId: student.id,
               financeLessonId: financeLesson.id
@@ -1722,6 +1735,7 @@ body{
             calendarLesson.financeStudentId = student.id;
             calendarLesson.financeLessonId = financeLesson.id;
             calendarLesson.date = financeLesson.date;
+            calendarLesson.color = financeColor;
             if(sourceCalendarLesson && !calendarLesson.time) calendarLesson.time = sourceCalendarLesson.time;
           }
           calendarLesson.financeStatus = financeLesson.status;
@@ -2427,6 +2441,7 @@ body{
 (function(){
   const DAYS = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
   const MONTHS = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
+  const SUBSCRIPTION_COLORS = ['#4CAF50','#2196F3','#00BCD4','#FF9800','#E91E63','#9C27B0','#795548','#607D8B'];
 
   let state = { students: [], notes: [], selectedDays: [], collapsed: {} };
   let editingNoteId = null;
@@ -2434,6 +2449,15 @@ body{
 
   const UNDO_LIMIT = 20;
   let undoStack = [];
+
+  function ensurePaymentColors(student){
+    if(!Array.isArray(student.payments)) return;
+    student.payments.forEach((payment, index) => {
+      if(!payment.color){
+        payment.color = SUBSCRIPTION_COLORS[index % SUBSCRIPTION_COLORS.length];
+      }
+    });
+  }
 
   function pushUndo(label){
     undoStack.push({
@@ -2477,6 +2501,7 @@ body{
         const parsed = JSON.parse(s);
         state = Object.assign(state, parsed);
         if(!state.collapsed) state.collapsed = {};
+        state.students.forEach(ensurePaymentColors);
       }
     }catch(e){}
   }
@@ -2637,7 +2662,11 @@ body{
     if(!startDate){ alert('Укажите дату начала абонемента'); return; }
     pushUndo(`Абонемент «${s.name}» — ${lessons} урок(ов)`);
     const amount = s.rate * lessons;
-    s.payments.push({ id:uid(), date: todayISO(), lessons, amount, startDate });
+    ensurePaymentColors(s);
+    s.payments.push({
+      id:uid(), date: todayISO(), lessons, amount, startDate,
+      color: SUBSCRIPTION_COLORS[s.payments.length % SUBSCRIPTION_COLORS.length]
+    });
     if(!s.scheduleStart || startDate < s.scheduleStart){ s.scheduleStart = startDate; }
     s.balance += lessons;
     buildLessonsForPayment(s, startDate, lessons, s.payments[s.payments.length - 1].id);
@@ -3096,7 +3125,10 @@ body{
         if(sid && lessons) preservedLessonScrolls[sid] = lessons.scrollTop;
       });
     }
-    state.students.forEach(s=>{ if(s.scheduleStart) recalcLessons(s); });
+    state.students.forEach(s=>{
+      ensurePaymentColors(s);
+      if(s.scheduleStart) recalcLessons(s);
+    });
     const box = document.getElementById('students');
     box.innerHTML = '';
     document.getElementById('emptyMsg').style.display = state.students.length ? 'none':'block';
@@ -3213,10 +3245,10 @@ body{
       card.innerHTML = `
         <div class="student-head">
           <div style="flex:1;min-width:0">
-            <button type="button" class="student-title" aria-expanded="${!isCollapsed}" data-student-id="${s.id}" onclick="toggleCard('${s.id}')">
+            <div class="student-title" onclick="toggleCard('${s.id}')">
               <span class="chevron">▼</span>
               <span class="student-name">${esc(s.name)}</span>
-            </button>
+            </div>
             <div class="collapse-summary">
               ${s.rate} ₽/урок • ${s.days.join(', ')} • баланс:
               <span class="badge ${s.balance>0?'green':'gray'}">${s.balance}</span>
