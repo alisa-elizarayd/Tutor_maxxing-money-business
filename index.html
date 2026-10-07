@@ -622,6 +622,8 @@ body{
 }
 #view-finance .student-title{
   display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none;
+  width:100%;padding:0;border:0;background:transparent;color:inherit;
+  font:inherit;text-align:left;
 }
 #view-finance .chevron{
   color:var(--purple);font-size:11px;transition:transform .15s;
@@ -2648,8 +2650,15 @@ body{
 
   window.toggleCard = function(id){
     state.collapsed = state.collapsed || {};
-    state.collapsed[id] = !state.collapsed[id];
-    save(); render();
+    const isCollapsed = state.collapsed[id] = !state.collapsed[id];
+    const cards = document.querySelectorAll('#students .student-card');
+    cards.forEach(card => {
+      if(card.dataset.studentId !== id) return;
+      card.classList.toggle('collapsed', isCollapsed);
+      const title = card.querySelector('.student-title');
+      if(title) title.setAttribute('aria-expanded', String(!isCollapsed));
+    });
+    save();
   };
 
   window.addPayment = function(id){
@@ -3218,8 +3227,8 @@ body{
             const p = block.payment;
             const subIdx = block.index % 5;
             lessonsHTML += `
-              <div class="subscription-block sub-${subIdx}">
-                <div class="subscription-header">
+              <div class="subscription-block sub-${subIdx}" style="--subscription-color:${p.color || SUBSCRIPTION_COLORS[block.index % SUBSCRIPTION_COLORS.length]};border-left:4px solid ${p.color || SUBSCRIPTION_COLORS[block.index % SUBSCRIPTION_COLORS.length]}">
+                <div class="subscription-header" style="color:var(--subscription-color);border-bottom-color:var(--subscription-color)">
                   <span class="sub-icon">💳</span>
                   <span class="sub-label">Абонемент #${block.index + 1}</span>
                   <span class="sub-date">от ${fmtDate(p.startDate || p.date)}</span>
@@ -3245,10 +3254,10 @@ body{
       card.innerHTML = `
         <div class="student-head">
           <div style="flex:1;min-width:0">
-            <div class="student-title" onclick="toggleCard('${s.id}')">
+            <button type="button" class="student-title" aria-expanded="${!isCollapsed}" onclick="toggleCard('${s.id}')">
               <span class="chevron">▼</span>
               <span class="student-name">${esc(s.name)}</span>
-            </div>
+            </button>
             <div class="collapse-summary">
               ${s.rate} ₽/урок • ${s.days.join(', ')} • баланс:
               <span class="badge ${s.balance>0?'green':'gray'}">${s.balance}</span>
