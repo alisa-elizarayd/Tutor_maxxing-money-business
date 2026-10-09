@@ -648,6 +648,7 @@ body{
   display:flex;justify-content:space-between;align-items:flex-start;
   gap:10px;flex-wrap:wrap;
 }
+#view-finance .student-head-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
 #view-finance .student-title{
   display:flex;align-items:center;gap:9px;cursor:pointer;user-select:none;
   width:100%;padding:0;border:0;background:transparent;color:inherit;
@@ -785,6 +786,8 @@ body{
 #view-finance .st-free-move{background:rgba(159,80,116,.15);color:var(--berry);}
 #view-finance .lesson-move-note{font-size:10px;color:var(--berry);margin-top:3px;}
 #view-finance .st-cancel{background:#fdecec;color:#c0392b;}
+#view-finance .st-free-cancel{background:rgba(80,159,84,.14);color:#357a38;}
+#view-finance .st-paid-cancel{background:#fdecec;color:#c0392b;}
 #view-finance .st-future{background:#eef4ff;color:#3b6ea5;}
 #view-finance .st-unpaid{background:#fff0e0;color:#e67e22;}
 #view-finance .st-beyond{background:rgba(230,126,34,.18);color:#e67e22;}
@@ -1874,7 +1877,9 @@ body{
     const labels = {
       paid: ['paid', '✓ оплачено'],
       unpaid: ['unpaid', '⚠ не оплачено'],
-      cancel: ['cancel', '✕ отмена'],
+      'free-cancel': ['free-cancel', '✓ бесплатная отмена'],
+      'paid-cancel': ['paid-cancel', '✕ платная отмена'],
+      cancel: ['paid-cancel', '✕ платная отмена'],
       move: ['move', '↪ перенос']
     };
     const item = labels[status.key];
@@ -3083,8 +3088,8 @@ body{
   };
 
   window.deleteStudent = function(id){
-    if(!confirm('Удалить ученика и всю его историю?')) return;
     const st = state.students.find(x=>x.id===id);
+    if(!confirm(`Удалить ученика «${st ? st.name : ''}»?\n\nБудут удалены его календарные уроки, финансовая карточка, абонементы и история оплат. Это действие нельзя отменить без резервной копии.`)) return;
     pushUndo(`Удаление ученика${st ? ' «' + st.name + '»' : ''}`);
     state.students = state.students.filter(s=>s.id!==id);
     delete state.collapsed[id];
@@ -3094,10 +3099,83 @@ body{
     save(); render();
   };
 
+  // Creates and downloads a real PDF directly in the browser. The report is
+  // rendered to a high-resolution canvas first, so Cyrillic text works without
+  // external libraries, network access, or opening a printer dialog.
+  window.exportStudentPdf = function(id){
+    const s = state.students.find(item => item.id === id);
+    if(!s) return;
+    ensurePaymentColors(s);
+    if(s.scheduleStart) recalcLessons(s);
+    const rep = calcReport(s);
+    const payments = [...(s.payments || [])].sort((a,b)=>(a.startDate || '').localeCompare(b.startDate || ''));
+    const statusText = {
+      planned:'Запланирован', done:'Проведён', unpaid:'Не оплачен', beyond:'Сверх абонемента',
+      'free-move':'Бесплатный перенос', 'paid-move':'Платный перенос',
+      'free-cancel':'Бесплатная отмена', 'paid-cancel':'Платная отмена', cancel:'Платная отмена'
+    };
+    const lessons = [...(s.lessons || [])].sort((a,b)=>a.date.localeCompare(b.date));
+    const pages = [];
+    const pageRows = 30;
+    for(let i=0; i<Math.max(1, lessons.length); i += pageRows) pages.push(lessons.slice(i, i + pageRows));
+    if(!lessons.length) pages.push([]);
+
+    const makePage = rows => {
+      const scale = 2, W = 794, H = 1123;
+      const canvas = document.createElement('canvas');
+      canvas.width = W * scale; canvas.height = H * scale;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(scale, scale); ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,W,H);
+      const text = (value,x,y,size=11,color='#30283a',weight='400') => { ctx.fillStyle=color; ctx.font=`${weight} ${size}px Arial,sans-serif`; ctx.fillText(String(value),x,y); };
+      const line = (x1,y1,x2,y2,color='#e5dced',width=1) => { ctx.strokeStyle=color; ctx.lineWidth=width; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); };
+      const box = (x,y,w,h,fill,stroke='#e5dced',radius=10) => { ctx.fillStyle=fill; ctx.strokeStyle=stroke; ctx.lineWidth=1; ctx.beginPath(); ctx.roundRect(x,y,w,h,radius); ctx.fill(); ctx.stroke(); };
+      text('TUTOR MAXI MONEY BUSINESS',48,48,11,'#7b509f','700');
+      text('Финансовый отчёт',48,79,25,'#30283a','700');
+      text(`Сформирован ${new Date().toLocaleDateString('ru-RU')}`,48,99,10,'#777');
+      box(560,34,185,78,'#f5effa','#dfcbed',10); text(s.name,574,59,16,'#7b509f','700'); text(`${Number(s.rate)||0} ₽ / урок`,574,79,11); text(`${(s.days||[]).join(', ') || 'Дни не указаны'}${s.time ? ' • '+s.time : ''}`,574,97,10,'#666');
+      line(48,126,746,126,'#7b509f',3);
+      const metrics=[['Доход',`${rep.income} ₽`],['Оплачено уроков',rep.paidLessons],['Проведено',rep.done],['Остаток',rep.balance]];
+      metrics.forEach((m,i)=>{const x=48+i*176;box(x,148,164,66,'#fcfaff','#e5dced',9);text(m[1],x+12,178,18,'#7b509f','700');text(m[0],x+12,198,10,'#777');});
+      let y=248;
+      text('Абонементы и оплаты',48,y,14,'#573b70','700'); y+=18; box(48,y,698,25,'#f3edf8','#e5dced',4); text('№',58,y+17,10,'#573b70','700'); text('Начало',100,y+17,10,'#573b70','700'); text('Уроков',460,y+17,10,'#573b70','700'); text('Сумма',580,y+17,10,'#573b70','700'); y+=25;
+      if(!payments.length){text('Абонементы ещё не внесены',58,y+18,10,'#888');y+=28;} else payments.forEach((p,i)=>{text(i+1,58,y+18,10,'#888');text(fmtDate(p.startDate||p.date),100,y+18,10);text(Number(p.lessons)||0,460,y+18,10);text(`${Number(p.amount)||0} ₽`,580,y+18,10);line(48,y+27,746,y+27);y+=28;});
+      y+=18; text('Уроки и статусы',48,y,14,'#573b70','700'); y+=18; box(48,y,698,25,'#f3edf8','#e5dced',4); text('№',58,y+17,10,'#573b70','700'); text('Дата',100,y+17,10,'#573b70','700'); text('Статус',310,y+17,10,'#573b70','700'); text('Оплачено вручную',600,y+17,10,'#573b70','700'); y+=25;
+      rows.forEach((lesson,index)=>{text(index+1,58,y+18,10,'#888');text(fmtDate(lesson.date),100,y+18,10);text(statusText[lesson.status]||lesson.status||'—',310,y+18,10);text(lesson.manualPaid?'Да':'—',600,y+18,10);line(48,y+27,746,y+27);y+=28;});
+      text('Отчёт создан в Tutor Maxi Money Business',48,H-34,9,'#888');
+      return canvas.toDataURL('image/jpeg',0.92);
+    };
+
+    const ascii = value => new TextEncoder().encode(value);
+    const binary = dataUrl => { const raw=atob(dataUrl.split(',')[1]); const bytes=new Uint8Array(raw.length); for(let i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i); return bytes; };
+    const chunks=[], offsets=[0]; let total=0;
+    const append = bytes => { chunks.push(bytes); total+=bytes.length; };
+    const objects = []; const pageRefs=[];
+    objects[1]={text:'<< /Type /Catalog /Pages 2 0 R >>'};
+    objects[2]={text:''};
+    pages.forEach((rows,index)=>{
+      const imageId=3+index*3, contentId=imageId+1, pageId=imageId+2;
+      const jpeg=binary(makePage(rows));
+      objects[imageId]={image:jpeg,width:1588,height:2246};
+      const content=`q\n794 0 0 1123 0 0 cm\n/Im${index+1} Do\nQ\n`;
+      objects[contentId]={stream:ascii(content)};
+      objects[pageId]={text:`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 794 1123] /Resources << /XObject << /Im${index+1} ${imageId} 0 R >> >> /Contents ${contentId} 0 R >>`};
+      pageRefs.push(`${pageId} 0 R`);
+    });
+    objects[2].text=`<< /Type /Pages /Kids [${pageRefs.join(' ')}] /Count ${pageRefs.length} >>`;
+    for(let id=1; id<objects.length; id++){
+      const obj=objects[id]; offsets[id]=total; append(ascii(`${id} 0 obj\n`));
+      if(obj.image){ append(ascii(`<< /Type /XObject /Subtype /Image /Width ${obj.width} /Height ${obj.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${obj.image.length} >>\nstream\n`)); append(obj.image); append(ascii('\nendstream\nendobj\n')); }
+      else if(obj.stream){ append(ascii(`<< /Length ${obj.stream.length} >>\nstream\n`)); append(obj.stream); append(ascii('endstream\nendobj\n')); }
+      else { append(ascii(`${obj.text}\nendobj\n`)); }
+    }
+    const xref=total; append(ascii(`xref\n0 ${objects.length}\n0000000000 65535 f \n`)); for(let id=1;id<objects.length;id++) append(ascii(`${String(offsets[id]).padStart(10,'0')} 00000 n \n`)); append(ascii(`trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`));
+    const blob=new Blob(chunks,{type:'application/pdf'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); const safeName=String(s.name||'student').replace(/[^a-zа-яё0-9]+/gi,'-').replace(/^-|-$/g,''); a.href=url; a.download=`финансовый-отчёт-${safeName||'ученик'}.pdf`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+  };
+
   function rebuildStudentFutureSchedule(student){
     ensureLessonEntitlements(student);
     const today = todayISO();
-    const keepStatuses = new Set(['done','cancel','free-move','paid-move']);
+      const keepStatuses = new Set(['done','cancel','free-cancel','paid-cancel','free-move','paid-move']);
     student.lessons = student.lessons.filter(lesson =>
       lesson.date < today || keepStatuses.has(lesson.status) ||
       lesson.generatedByMoveId || lesson.generatedByCancelId
@@ -3324,6 +3402,14 @@ body{
       const effective = ent.effective;
       const hasFreeMove = ent.lessons.some(l => l.status === 'free-move');
 
+      // A free cancellation releases this entitlement. No replacement is
+      // created, so the paid lesson remains available for a later scheduled
+      // lesson instead of being consumed.
+      if(source.status === 'free-cancel' || effective.status === 'free-cancel'){
+        effective.status = 'free-cancel';
+        return;
+      }
+
       if(hasFreeMove){
         used++;
         effective.coveredByFreeMove = true;
@@ -3339,7 +3425,8 @@ body{
         return;
       }
 
-      if(source.status === 'done' || source.status === 'paid-move'){
+      if(source.status === 'done' || source.status === 'paid-move' ||
+        source.status === 'paid-cancel' || source.status === 'cancel'){
         used++;
         return;
       }
@@ -3506,38 +3593,18 @@ body{
       if(status === 'free-move') replacement.coveredByFreeMove = true;
       s.lessons.push(replacement);
       s.lessons.sort((a,b)=>a.date.localeCompare(b.date));
-    } else if(status === 'cancel'){
-      pushUndo(`Отмена урока «${s.name}» — ${l.date}`);
+    } else if(status === 'free-cancel' || status === 'paid-cancel'){
+      pushUndo(`${status === 'free-cancel' ? 'Бесплатная' : 'Платная'} отмена урока «${s.name}» — ${l.date}`);
       removeMoveDescendants(s, l.id);
-      l.status = 'cancel';
+      l.status = status;
       l.movedTo = null;
-
-      // Cancellation is free and has no replacement date chosen manually.
-      // Extend the schedule by one next suitable weekday while keeping
-      // the same prepaid entitlement.
-      const lastDate = s.lessons.reduce(
-        (max,item) => item.date > max ? item.date : max,
-        l.date
-      );
-      const replacementDate = nextScheduleDate(s, lastDate);
-      if(replacementDate){
-        s.lessons.push({
-          id: uid(),
-          date: replacementDate,
-          status: 'planned',
-          movedFrom: l.date,
-          generatedByCancelId: l.id,
-          entitlementId: l.entitlementId || uid(),
-          paymentId: l.paymentId || null
-        });
-      }
       s.lessons.sort((a,b)=>a.date.localeCompare(b.date));
     } else {
       pushUndo(`Смена статуса «${s.name}» — ${l.date}`);
       l.status = status;
       l.movedTo = null;
 
-      if(previousStatus === 'free-move' || previousStatus === 'paid-move' || previousStatus === 'cancel'){
+      if(previousStatus === 'free-move' || previousStatus === 'paid-move' || previousStatus === 'free-cancel' || previousStatus === 'paid-cancel' || previousStatus === 'cancel'){
         removeMoveDescendants(s, l.id);
       }
     }
@@ -3568,14 +3635,15 @@ body{
     const effective = groups.map(group => group.effective);
     const paidMove = s.lessons.filter(l=>l.status==='paid-move').length;
     const freeMove = s.lessons.filter(l=>l.status==='free-move').length;
-    const cancel = s.lessons.filter(l=>l.status==='cancel').length;
+    const freeCancel = s.lessons.filter(l=>l.status==='free-cancel').length;
+    const paidCancel = s.lessons.filter(l=>l.status==='paid-cancel' || l.status==='cancel').length;
     const done = effective.filter(l=>l.status==='done').length;
     const unpaid = effective.filter(l=>l.status==='unpaid').length;
     const planned = effective.filter(l=>l.status==='planned').length;
     const beyond = effective.filter(l=>l.status==='beyond').length;
     const income = s.payments.reduce((sum,p)=>sum+p.amount,0);
     const paidLessons = s.payments.reduce((sum,p)=>sum+p.lessons,0);
-    return { total:groups.length, done, paidMove, freeMove, cancel, unpaid, planned, beyond, income, paidLessons, balance:s.balance };
+    return { total:groups.length, done, paidMove, freeMove, freeCancel, paidCancel, cancel:freeCancel + paidCancel, unpaid, planned, beyond, income, paidLessons, balance:s.balance };
   }
 
   function normalizeStudentName(name){
@@ -3631,8 +3699,10 @@ body{
       const exact = financeLessons.find(lesson => lesson.date === peer.date);
       if(!exact) return;
       const entry = orderedGroups.find(candidate => candidate.group.includes(exact));
-      if(exact.status === 'cancel'){
-        exactStatuses.set(peer.id, { key:'cancel' });
+      if(exact.status === 'free-cancel' || exact.status === 'cancel'){
+        exactStatuses.set(peer.id, { key:'free-cancel' });
+      } else if(exact.status === 'paid-cancel'){
+        exactStatuses.set(peer.id, { key:'paid-cancel' });
       } else if(exact.status === 'free-move' || exact.status === 'paid-move'){
         exactStatuses.set(peer.id, { key:'move' });
       } else if(entry){
@@ -3801,14 +3871,17 @@ body{
               Доход: <span class="badge berry">${rep.income} ₽</span>
             </div>
           </div>
-          <button type="button" class="btn berry tiny" onclick="deleteStudent('${s.id}')">Удалить</button>
+          <div class="student-head-actions">
+            <button type="button" class="btn purple tiny" onclick="exportStudentPdf('${s.id}')">📄 PDF</button>
+            <button type="button" class="btn berry tiny" onclick="deleteStudent('${s.id}')">Удалить</button>
+          </div>
         </div>
         <div class="student-body">
           <div class="sub">
             <div class="sub-title">💳 Внести абонемент</div>
             <div class="pay-row">
               <div><label>Кол-во уроков</label><input id="payLessons_${s.id}" type="number" min="1" placeholder="напр. 8"></div>
-              <div><label>Дата начала отсчёта</label><input id="payStart_${s.id}" type="date" value="${s.scheduleStart || today}"></div>
+              <div><label>С какого числа начать абонемент</label><input id="payStart_${s.id}" type="date" value="${s.scheduleStart || today}"></div>
               <div><label>Итого</label><div style="font-size:12px;color:var(--muted);padding-top:9px" id="sum_${s.id}">—</div></div>
               <button class="btn" onclick="addPayment('${s.id}')">Оплатить</button>
             </div>
@@ -3825,7 +3898,8 @@ body{
               <div class="rep-item"><div class="rep-num" style="color:var(--green)">${rep.done}</div><div class="rep-lbl">проведено</div></div>
               <div class="rep-item"><div class="rep-num" style="color:var(--purple)">${rep.paidMove}</div><div class="rep-lbl">платных переносов</div></div>
               <div class="rep-item"><div class="rep-num" style="color:var(--berry)">${rep.freeMove}</div><div class="rep-lbl">бесплатных переносов</div></div>
-              <div class="rep-item"><div class="rep-num" style="color:#c0392b">${rep.cancel}</div><div class="rep-lbl">отмен</div></div>
+              <div class="rep-item"><div class="rep-num" style="color:var(--green)">${rep.freeCancel}</div><div class="rep-lbl">бесплатных отмен</div></div>
+              <div class="rep-item"><div class="rep-num" style="color:#c0392b">${rep.paidCancel}</div><div class="rep-lbl">платных отмен</div></div>
               <div class="rep-item"><div class="rep-num" style="color:#e67e22">${rep.unpaid}</div><div class="rep-lbl">неоплачено</div></div>
               <div class="rep-item"><div class="rep-num">${rep.planned}</div><div class="rep-lbl">запланировано</div></div>
               <div class="rep-item"><div class="rep-num" style="color:#e67e22">${rep.beyond}</div><div class="rep-lbl">сверх абонемента</div></div>
@@ -3876,7 +3950,9 @@ body{
       done:['st-done','проведён ✔'],
       'paid-move':['st-paid-move','платный перенос'],
       'free-move':['st-free-move','бесплатный перенос'],
-      cancel:['st-cancel','отмена'],
+      'free-cancel':['st-free-cancel','бесплатная отмена'],
+      'paid-cancel':['st-paid-cancel','платная отмена'],
+      cancel:['st-paid-cancel','платная отмена'],
       unpaid:['st-unpaid','не оплачен']
     };
     let [cls,txt] = map[l.status] || ['st-planned','—'];
@@ -3908,7 +3984,8 @@ body{
             ${opt('done','Проведён',l.status)}
             ${opt('paid-move','Платный перенос',l.status)}
             ${opt('free-move','Бесплатный перенос',l.status)}
-            ${opt('cancel','Отмена',l.status)}
+            ${opt('free-cancel','Бесплатная отмена',l.status)}
+            ${opt('paid-cancel','Платная отмена',l.status)}
           </select>
         </div>
       </div>
