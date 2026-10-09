@@ -3149,6 +3149,7 @@ body{
     const binary = dataUrl => { const raw=atob(dataUrl.split(',')[1]); const bytes=new Uint8Array(raw.length); for(let i=0;i<raw.length;i++) bytes[i]=raw.charCodeAt(i); return bytes; };
     const chunks=[], offsets=[0]; let total=0;
     const append = bytes => { chunks.push(bytes); total+=bytes.length; };
+    append(ascii('%PDF-1.4\n%\xFF\xFF\xFF\xFF\n'));
     const objects = []; const pageRefs=[];
     objects[1]={text:'<< /Type /Catalog /Pages 2 0 R >>'};
     objects[2]={text:''};
