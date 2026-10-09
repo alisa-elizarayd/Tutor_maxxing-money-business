@@ -1,5 +1,5 @@
 // === Service Worker для приложения "Репетитор" ===
-const CACHE_NAME = 'v9';
+const CACHE_NAME = 'v10';
 
 const PRECACHE_URLS = [
   './',
@@ -28,14 +28,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   if(request.method !== 'GET') return;
-
   const url = new URL(request.url);
   if(url.origin !== location.origin) return;
-
-  const isDocument = request.mode === 'navigate' ||
-    url.pathname.endsWith('/index.html') ||
-    url.pathname.endsWith('/');
-
+  const isDocument = request.mode === 'navigate' || url.pathname.endsWith('/index.html') || url.pathname.endsWith('/');
   if(isDocument){
     event.respondWith(
       fetch(request, { cache: 'no-store' })
@@ -50,7 +45,6 @@ self.addEventListener('fetch', (event) => {
     );
     return;
   }
-
   event.respondWith(
     caches.match(request).then(cached => {
       const network = fetch(request).then(response => {
@@ -60,14 +54,11 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       }).catch(() => cached);
-
       return cached || network;
     })
   );
 });
 
 self.addEventListener('message', (event) => {
-  if(event.data && event.data.type === 'SKIP_WAITING'){
-    self.skipWaiting();
-  }
+  if(event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
