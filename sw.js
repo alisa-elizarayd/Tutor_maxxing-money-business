@@ -1,5 +1,5 @@
 // === Service Worker для приложения "Репетитор" ===
-const CACHE_NAME = 'v8';;
+const CACHE_NAME = 'v9';
 
 const PRECACHE_URLS = [
   './',
@@ -32,8 +32,6 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if(url.origin !== location.origin) return;
 
-  // HTML must be network-first. Otherwise a deployment can remain invisible
-  // because an old index.html is returned from cache forever.
   const isDocument = request.mode === 'navigate' ||
     url.pathname.endsWith('/index.html') ||
     url.pathname.endsWith('/');
@@ -53,7 +51,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets remain available offline and are refreshed in the background.
   event.respondWith(
     caches.match(request).then(cached => {
       const network = fetch(request).then(response => {
