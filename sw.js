@@ -1,5 +1,5 @@
 // === Service Worker для приложения "Репетитор" ===
-const CACHE_NAME = 'v17';
+const CACHE_NAME = 'v18';
 
 const PRECACHE_URLS = [
   './',
