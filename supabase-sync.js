@@ -186,8 +186,15 @@
       offline: 'Статус: Офлайн',
       error: 'Статус: Ошибка синхронизации'
     };
-    text.textContent = detail || labels[state] || labels.offline;
+    const resolved = detail || labels[state] || labels.offline;
+    text.textContent = resolved;
     status.dataset.state = state;
+    status.title = resolved;
+    status.setAttribute('aria-label', resolved);
+    const bar = document.getElementById('tutorAuthBar');
+    if (bar) bar.dataset.state = state;
+    const toggleText = document.getElementById('tutorCloudToggleText');
+    if (toggleText) toggleText.textContent = resolved.replace(/^Статус:\s*/, '');
   }
 
   function setMessage(text, type = '') {
@@ -206,16 +213,35 @@
     if (document.getElementById('tutorAuthModal')) return;
     const style = document.createElement('style');
     style.textContent = `
-      #tutorAuthBar{position:fixed;top:10px;right:14px;z-index:10000;display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;max-width:min(700px,calc(100vw - 28px));font-family:inherit}
-      #tutorAccountStatus,#tutorSyncStatus{display:inline-flex;align-items:center;gap:7px;background:#fff;border-radius:10px;padding:10px 13px;box-shadow:0 2px 12px #0003;font-size:14px;font-weight:700;white-space:nowrap}
-      #tutorAccountStatus{color:#245b2b;max-width:280px;overflow:hidden;text-overflow:ellipsis}
-      #tutorSyncStatus{color:#555;min-width:230px}
+      #tutorAuthBar{position:fixed;top:calc(8px + env(safe-area-inset-top));right:10px;z-index:10000;font-family:inherit}
+      #tutorCloudToggle{display:inline-flex;align-items:center;gap:7px;max-width:min(340px,calc(100vw - 20px));padding:8px 12px;border:1px solid rgba(255,255,255,.8);border-radius:999px;background:rgba(255,255,255,.96);color:#245b2b;box-shadow:0 2px 12px #0003;cursor:pointer;font:700 13px/1.2 inherit}
+      #tutorCloudToggle:hover{box-shadow:0 4px 16px #0004;transform:translateY(-1px)}
+      #tutorCloudToggle .tutor-cloud-icon{font-size:14px;line-height:1}
+      #tutorCloudToggle .tutor-cloud-dot{width:8px;height:8px;border-radius:50%;background:#666;flex:0 0 auto}
+      #tutorCloudToggle .tutor-chevron{font-size:15px;line-height:1;opacity:.65;transition:transform .18s}
+      #tutorAuthBar.open #tutorCloudToggle .tutor-chevron{transform:rotate(180deg)}
+      #tutorCloudToggleText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #tutorAuthBar[data-state="synced"] #tutorCloudToggle{color:#176b2a;background:#eef9ef}
+      #tutorAuthBar[data-state="syncing"] #tutorCloudToggle{color:#7a5600;background:#fff8dc}
+      #tutorAuthBar[data-state="offline"] #tutorCloudToggle{color:#666;background:#f3f3f3}
+      #tutorAuthBar[data-state="error"] #tutorCloudToggle{color:#a62222;background:#fff0f0}
+      #tutorAuthBar[data-state="synced"] .tutor-cloud-dot{background:#1f9d45}
+      #tutorAuthBar[data-state="syncing"] .tutor-cloud-dot{background:#d39b00}
+      #tutorAuthBar[data-state="offline"] .tutor-cloud-dot{background:#777}
+      #tutorAuthBar[data-state="error"] .tutor-cloud-dot{background:#c62828}
+      #tutorCloudPanel{display:none;position:absolute;top:calc(100% + 8px);right:0;width:min(340px,calc(100vw - 20px));padding:10px;background:#fff;border:1px solid #e6e0eb;border-radius:14px;box-shadow:0 10px 28px #0003}
+      #tutorAuthBar.open #tutorCloudPanel{display:block}
+      #tutorAccountStatus,#tutorSyncStatus{display:flex;align-items:center;gap:7px;width:100%;background:#faf9fc;border-radius:10px;padding:9px 10px;font-size:13px;font-weight:700;white-space:nowrap}
+      #tutorAccountStatus{color:#245b2b;overflow:hidden;text-overflow:ellipsis}
+      #tutorSyncStatus{color:#555;margin-top:7px}
       #tutorSyncStatus[data-state="synced"]{color:#176b2a;background:#eef9ef}
       #tutorSyncStatus[data-state="syncing"]{color:#7a5600;background:#fff8dc}
       #tutorSyncStatus[data-state="offline"]{color:#666;background:#f3f3f3}
       #tutorSyncStatus[data-state="error"]{color:#a62222;background:#fff0f0}
       .tutor-status-dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:0 0 auto}
-      #tutorAuthBar button{display:inline-flex;align-items:center;justify-content:center;border:1px solid #4caf50;background:#fff;color:#245b2b;border-radius:10px;padding:10px 13px;cursor:pointer;font-size:14px;font-weight:700;white-space:nowrap;box-shadow:0 2px 12px #0003}
+      .tutor-menu-actions{display:flex;gap:7px;margin-top:9px}
+      #tutorAuthBar .tutor-menu-actions button{flex:1;min-width:0;display:inline-flex;align-items:center;justify-content:center;border:1px solid #4caf50;background:#fff;color:#245b2b;border-radius:9px;padding:9px 10px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap}
+      #tutorAuthBar .tutor-menu-actions button:hover{filter:brightness(.98);transform:translateY(-1px)}
       #tutorAuthBar #tutorLogout{background:#fff4f4;border-color:#b3261e;color:#9b1c1c;display:none}
       #tutorAuthModal{position:fixed;inset:0;z-index:10001;display:none;place-items:center;background:#0008;padding:16px}
       #tutorAuthModal.open{display:grid}.tutor-auth-card{width:min(410px,100%);background:#fff;border-radius:16px;padding:22px;box-shadow:0 18px 60px #0005}
@@ -225,16 +251,26 @@
       #tutorSignIn{background:#4caf50;color:#fff}.tutorSignUp{background:#e8f5e9;color:#2d6d34}#tutorSignOut{background:#f5f5f5;color:#555;display:none}
       .tutorAuthClose{float:right;border:0;background:none;font-size:24px;cursor:pointer;color:#777}.tutor-auth-message{min-height:22px;margin:12px 0 0;font-size:13px}
       .tutor-auth-message.ok{color:#2d6d34}.tutor-auth-message.error{color:#b3261e}
-      @media(max-width:700px){#tutorAuthBar{top:8px;right:8px;max-width:calc(100vw - 16px);gap:5px}#tutorAccountStatus,#tutorSyncStatus{font-size:12px;padding:8px 10px}#tutorAccountStatus{max-width:calc(100vw - 16px)}#tutorSyncStatus{min-width:0;flex:1}#tutorAuthBar button{font-size:12px;padding:8px 10px}}
+      @media(max-width:700px){
+        #tutorAuthBar{top:calc(6px + env(safe-area-inset-top));right:8px}
+        #tutorCloudToggle{max-width:calc(100vw - 16px);font-size:12px;padding:8px 10px}
+        #tutorCloudPanel{width:min(320px,calc(100vw - 16px))}
+      }
     `;
-    document.head.appendChild(style);
     document.body.insertAdjacentHTML('beforeend', `
-      <div id="tutorAuthBar">
-        <div id="tutorAccountStatus">Аккаунт: не выполнен вход</div>
-        <div id="tutorSyncStatus" data-state="offline"><span class="tutor-status-dot"></span><span id="tutorSyncStatusText">Статус: Офлайн</span></div>
-        <button id="tutorLogin">Войти</button>
-        <button id="tutorCreate">Создать аккаунт</button>
-        <button id="tutorLogout">Выйти</button>
+      <div id="tutorAuthBar" data-state="offline">
+        <button id="tutorCloudToggle" type="button" aria-expanded="false" aria-controls="tutorCloudPanel" title="Открыть настройки аккаунта и синхронизации">
+          <span class="tutor-cloud-icon">☁️</span><span class="tutor-cloud-dot"></span><span id="tutorCloudToggleText">Офлайн</span><span class="tutor-chevron">⌄</span>
+        </button>
+        <div id="tutorCloudPanel" role="dialog" aria-label="Аккаунт и синхронизация">
+          <div id="tutorAccountStatus">Аккаунт: не выполнен вход</div>
+          <div id="tutorSyncStatus" data-state="offline" role="status" aria-live="polite" title="Статус синхронизации"><span class="tutor-status-dot"></span><span id="tutorSyncStatusText">Статус: Офлайн</span></div>
+          <div class="tutor-menu-actions">
+            <button id="tutorLogin" type="button">Войти</button>
+            <button id="tutorCreate" type="button">Создать аккаунт</button>
+            <button id="tutorLogout" type="button">Выйти</button>
+          </div>
+        </div>
       </div>
       <div id="tutorAuthModal" aria-hidden="true"><div class="tutor-auth-card">
         <button class="tutorAuthClose" id="tutorAuthClose" aria-label="Закрыть">×</button>
@@ -247,12 +283,29 @@
       </div></div>
     `);
     const modal = document.getElementById('tutorAuthModal');
-    const openModal = () => modal.classList.add('open');
+    const bar = document.getElementById('tutorAuthBar');
+    const cloudToggle = document.getElementById('tutorCloudToggle');
+    const closePanel = () => {
+      bar.classList.remove('open');
+      cloudToggle.setAttribute('aria-expanded', 'false');
+    };
+    const openModal = () => { closePanel(); modal.classList.add('open'); };
+    cloudToggle.onclick = () => {
+      const open = !bar.classList.contains('open');
+      bar.classList.toggle('open', open);
+      cloudToggle.setAttribute('aria-expanded', String(open));
+    };
     document.getElementById('tutorLogin').onclick = openModal;
     document.getElementById('tutorCreate').onclick = openModal;
     document.getElementById('tutorLogout').onclick = signOut;
     document.getElementById('tutorAuthClose').onclick = () => modal.classList.remove('open');
     modal.onclick = event => { if (event.target === modal) modal.classList.remove('open'); };
+    document.addEventListener('click', event => {
+      if (!bar.contains(event.target)) closePanel();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { closePanel(); modal.classList.remove('open'); }
+    });
     document.getElementById('tutorSignIn').onclick = signIn;
     document.getElementById('tutorSignUp').onclick = signUp;
     document.getElementById('tutorSignOut').onclick = signOut;
@@ -327,7 +380,7 @@
     if (!user || applyingRemote) return;
     setSyncStatus('syncing');
     const serialized = JSON.stringify(snapshot);
-    if (serialized === lastUploaded) return;
+    if (serialized === lastUploaded) { setSyncStatus('synced'); return; }
     const { error } = await client.from(DATA_TABLE).upsert(
       { user_id: user.id, id: SNAPSHOT_ID, data: snapshot, updated_at: new Date().toISOString() },
       { onConflict: 'user_id,id' }
@@ -386,6 +439,7 @@
           applyingRemote = false;
           lastUploaded = JSON.stringify(merged);
           notifyApp();
+          setSyncStatus('synced');
         })
       .subscribe();
   }
