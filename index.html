@@ -4155,6 +4155,17 @@ body{
     reader.readAsText(file);
   };
 
+  // Cloud sync writes the merged finance state to localStorage after this
+  // script has already rendered the initial local state. Refresh the finance
+  // view when the sync module announces a remote update.
+  window.addEventListener('finance-state-changed', () => {
+    load();
+    render();
+    renderNotes();
+    renderDays();
+    updateUndoFinanceBtn();
+  });
+
   load();
   renderDays();
   render();
