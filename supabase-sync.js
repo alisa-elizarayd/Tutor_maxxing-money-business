@@ -15,6 +15,9 @@
     calendar: 'tutorLessonsPro',
     finance: 'tutor_mvp_state_v5'
   };
+  // Background images can be multi-megabyte data URLs. Keep them local;
+  // business data and lightweight settings continue syncing normally.
+  const LOCAL_ONLY_KEYS = new Set(['tutorBg']);
 
   let client = null;
   let user = null;
@@ -36,7 +39,9 @@
     const snapshot = {};
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && key.startsWith('tutor')) snapshot[key] = parseValue(localStorage.getItem(key));
+      if (key && key.startsWith('tutor') && !LOCAL_ONLY_KEYS.has(key)) {
+        snapshot[key] = parseValue(localStorage.getItem(key));
+      }
     }
     return snapshot;
   }
@@ -53,7 +58,7 @@
 
   function writeSnapshot(snapshot) {
     for (const [key, value] of Object.entries(snapshot || {})) {
-      if (!key.startsWith('tutor')) continue;
+      if (!key.startsWith('tutor') || LOCAL_ONLY_KEYS.has(key)) continue;
       localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
     }
   }
@@ -189,9 +194,10 @@
       local.tutor_mvp_state_v5,
       calendar
     );
+    const mergedBase = { ...local, ...remote };
+    for (const key of LOCAL_ONLY_KEYS) delete mergedBase[key];
     return {
-      ...local,
-      ...remote,
+      ...mergedBase,
       tutorLessonsPro: calendar,
       tutor_mvp_state_v5: finance
     };
