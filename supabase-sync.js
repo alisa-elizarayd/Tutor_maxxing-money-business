@@ -24,6 +24,8 @@
   let lastUploaded = '';
   let syncState = 'offline';
   let watchStarted = false;
+  let syncInFlight = false;
+  let syncQueued = false;
 
   function parseValue(raw) {
     if (raw == null) return null;
@@ -450,11 +452,24 @@
   function scheduleSync() {
     if (!user || applyingRemote) return;
     clearTimeout(syncTimer);
-    syncTimer = setTimeout(async () => {
-      try {
-        const local = snapshotLocal();
-        await uploadSnapshot(local);
-      } catch (error) { setSyncStatus('error'); console.warn('Tutor cloud sync failed:', error); }
+    syncTimer = setTimeout(() => {
+      if (syncInFlight) {
+        syncQueued = true;
+        return;
+      }
+      syncInFlight = true;
+      uploadSnapshot(snapshotLocal())
+        .catch(error => {
+          setSyncStatus('error');
+          console.warn('Tutor cloud sync failed:', error?.message || error);
+        })
+        .finally(() => {
+          syncInFlight = false;
+          if (syncQueued) {
+            syncQueued = false;
+            scheduleSync();
+          }
+        });
     }, 700);
   }
 
