@@ -150,15 +150,30 @@
   function mergeSnapshots(remoteSnapshot, localSnapshot, legacyRows) {
     const remote = remoteSnapshot && typeof remoteSnapshot === 'object' ? remoteSnapshot : {};
     const local = localSnapshot && typeof localSnapshot === 'object' ? localSnapshot : {};
-    const legacyCalendar = legacyRows?.calendar || {};
-    const legacyFinance = legacyRows?.finance || {};
+    const legacyCalendar = Array.isArray(legacyRows?.calendar) ? legacyRows.calendar : [];
+    const legacyFinance = legacyRows?.finance && typeof legacyRows.finance === 'object'
+      ? legacyRows.finance
+      : {};
+
+    // An older/empty app_state row must not hide useful legacy data. This is
+    // important during first login from a fresh browser, where localStorage is
+    // empty and a stale race could otherwise upload an empty snapshot.
+    const remoteCalendar = Array.isArray(remote.tutorLessonsPro) ? remote.tutorLessonsPro : [];
+    const calendarSource = remoteCalendar.length ? remoteCalendar : legacyCalendar;
+    const remoteFinance = remote.tutor_mvp_state_v5 && typeof remote.tutor_mvp_state_v5 === 'object'
+      ? remote.tutor_mvp_state_v5
+      : {};
+    const remoteHasFinance = (Array.isArray(remoteFinance.students) && remoteFinance.students.length > 0)
+      || (Array.isArray(remoteFinance.notes) && remoteFinance.notes.length > 0);
+    const financeSource = remoteHasFinance ? remoteFinance : legacyFinance;
+
     const calendar = mergeUnique(
-      remote.tutorLessonsPro || legacyCalendar,
+      calendarSource,
       local.tutorLessonsPro,
       item => keyOf(item)
     );
     const finance = mergeFinance(
-      remote.tutor_mvp_state_v5 || legacyFinance,
+      financeSource,
       local.tutor_mvp_state_v5,
       calendar
     );
