@@ -39,6 +39,16 @@
     return snapshot;
   }
 
+  function hasAppContent(snapshot) {
+    const calendar = Array.isArray(snapshot?.tutorLessonsPro) ? snapshot.tutorLessonsPro : [];
+    const finance = snapshot?.tutor_mvp_state_v5 && typeof snapshot.tutor_mvp_state_v5 === 'object'
+      ? snapshot.tutor_mvp_state_v5
+      : {};
+    const students = Array.isArray(finance.students) ? finance.students : [];
+    const notes = Array.isArray(finance.notes) ? finance.notes : [];
+    return calendar.length > 0 || students.length > 0 || notes.length > 0;
+  }
+
   function writeSnapshot(snapshot) {
     for (const [key, value] of Object.entries(snapshot || {})) {
       if (!key.startsWith('tutor')) continue;
@@ -396,6 +406,13 @@
     setSyncStatus('syncing');
     const serialized = JSON.stringify(snapshot);
     if (serialized === lastUploaded) { setSyncStatus('synced'); return; }
+    // Never let a fresh browser with an empty localStorage erase an existing
+    // cloud snapshot during auth/session races. A deliberate deletion from a
+    // previously populated session still uploads because lastUploaded is set.
+    if (!hasAppContent(snapshot) && !lastUploaded) {
+      setSyncStatus('synced');
+      return;
+    }
     const { error } = await client.from(DATA_TABLE).upsert(
       { user_id: user.id, id: SNAPSHOT_ID, data: snapshot, updated_at: new Date().toISOString() },
       { onConflict: 'user_id,id' }
