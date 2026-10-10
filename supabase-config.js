@@ -1,5 +1,4 @@
 window.TUTOR_SUPABASE_CONFIG = {
-  // Filled after the dedicated Supabase Free project is created.
-  url: '__SUPABASE_URL__',
-  publishableKey: '__SUPABASE_PUBLISHABLE_KEY__'
+  url: 'https://zqrxttikhgbckzphokwt.supabase.co',
+  publishableKey: 'sb_publishable_0n6fD4EZLYG9ut_Wk3_m1A_0REFoIVS'
 };
