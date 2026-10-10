@@ -202,10 +202,10 @@
     if (document.getElementById('tutorAuthModal')) return;
     const style = document.createElement('style');
     style.textContent = `
-      #tutorAuthBar{position:fixed;top:12px;right:14px;z-index:10000;display:flex;gap:7px;align-items:center;max-width:calc(100vw - 28px)}
-      #tutorAuthStatus{font-size:12px;color:#2d6d34;background:#fff;border-radius:9px;padding:8px 10px;box-shadow:0 2px 10px #0002;max-width:270px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      #tutorAuthBar button{border:1px solid #4caf50;background:#fff;color:#2d6d34;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:700;white-space:nowrap;box-shadow:0 2px 10px #0002}
-      #tutorAuthBar #tutorLogout{background:#f5f5f5;border-color:#aaa;color:#555;display:none}
+      #tutorAuthBar{position:fixed;top:10px;right:14px;z-index:10000;display:flex;gap:7px;align-items:center;justify-content:flex-end;flex-wrap:wrap;max-width:min(520px,calc(100vw - 28px))}
+      #tutorAuthStatus{font-size:14px;color:#245b2b;background:#fff;border-radius:10px;padding:10px 14px;box-shadow:0 2px 12px #0003;min-width:220px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #tutorAuthBar button{display:inline-flex;align-items:center;justify-content:center;border:1px solid #4caf50;background:#fff;color:#245b2b;border-radius:10px;padding:10px 13px;cursor:pointer;font-size:14px;font-weight:700;white-space:nowrap;box-shadow:0 2px 12px #0003}
+      #tutorAuthBar #tutorLogout{background:#fff4f4;border-color:#b3261e;color:#9b1c1c;display:none}
       #tutorAuthModal{position:fixed;inset:0;z-index:10001;display:none;place-items:center;background:#0008;padding:16px}
       #tutorAuthModal.open{display:grid}.tutor-auth-card{width:min(410px,100%);background:#fff;border-radius:16px;padding:22px;box-shadow:0 18px 60px #0005}
       .tutor-auth-card h2{margin:0 0 8px;color:#2d6d34;font-size:22px}.tutor-auth-card p{margin:0 0 16px;color:#555;line-height:1.45}
@@ -214,7 +214,7 @@
       #tutorSignIn{background:#4caf50;color:#fff}.tutorSignUp{background:#e8f5e9;color:#2d6d34}#tutorSignOut{background:#f5f5f5;color:#555;display:none}
       .tutorAuthClose{float:right;border:0;background:none;font-size:24px;cursor:pointer;color:#777}.tutor-auth-message{min-height:22px;margin:12px 0 0;font-size:13px}
       .tutor-auth-message.ok{color:#2d6d34}.tutor-auth-message.error{color:#b3261e}
-      @media(max-width:700px){#tutorAuthBar{top:8px;right:8px;gap:4px}#tutorAuthStatus{max-width:145px;font-size:10px}#tutorAuthBar button{font-size:10px;padding:7px 8px}}
+      @media(max-width:700px){#tutorAuthBar{top:8px;right:8px;max-width:calc(100vw - 16px)}#tutorAuthStatus{min-width:0;max-width:calc(100vw - 16px);font-size:12px;padding:8px 10px}#tutorAuthBar button{font-size:12px;padding:8px 10px}}#tutorAuthStatus{max-width:145px;font-size:10px}#tutorAuthBar button{font-size:10px;padding:7px 8px}}
     `;
     document.head.appendChild(style);
     document.body.insertAdjacentHTML('beforeend', `
@@ -256,7 +256,7 @@
     const signUpButton = document.getElementById('tutorSignUp');
     const signOutButton = document.getElementById('tutorSignOut');
     if (user) {
-      login.style.display = 'none'; create.style.display = 'none'; logout.style.display = '';
+      login.style.display = 'none'; create.style.display = 'none'; logout.style.display = 'inline-flex';
       signInButton.style.display = 'none'; signUpButton.style.display = 'none'; signOutButton.style.display = 'block';
       setSyncStatus(syncState);
     } else {
