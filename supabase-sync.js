@@ -282,6 +282,7 @@
         #tutorCloudPanel{width:min(320px,calc(100vw - 16px))}
       }
     `;
+    document.head.appendChild(style);
     document.body.insertAdjacentHTML('beforeend', `
       <div id="tutorAuthBar" data-state="offline">
         <button id="tutorCloudToggle" type="button" aria-expanded="false" aria-controls="tutorCloudPanel" title="Открыть настройки аккаунта и синхронизации">
