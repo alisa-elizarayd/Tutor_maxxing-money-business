@@ -421,11 +421,9 @@
       { onConflict: 'user_id,id' }
     );
     if (error) throw error;
-    // Keep legacy rows populated for backwards compatibility with previous clients.
-    await client.from(DATA_TABLE).upsert([
-      { user_id: user.id, id: 'calendar', data: snapshot.tutorLessonsPro || [], updated_at: new Date().toISOString() },
-      { user_id: user.id, id: 'finance', data: snapshot.tutor_mvp_state_v5 || {}, updated_at: new Date().toISOString() }
-    ], { onConflict: 'user_id,id' });
+    // app_state is the single canonical row. Legacy calendar/finance rows are
+    // read only for one-time recovery, so normal sync uses one write instead
+    // of three and avoids unnecessary rate-limit pressure.
     lastUploaded = serialized;
     setSyncStatus('synced');
   }
