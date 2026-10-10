@@ -22,6 +22,7 @@
   let syncTimer = null;
   let applyingRemote = false;
   let lastUploaded = '';
+  let syncState = 'offline';
   let watchStarted = false;
 
   function parseValue(raw) {
@@ -174,6 +175,17 @@
     window.dispatchEvent(new Event('calendar-state-changed'));
   }
 
+  function setSyncStatus(state, detail = '') {
+    syncState = state;
+    const status = document.getElementById('tutorAuthStatus');
+    if (!status) return;
+    const labels = { syncing: '⟳ Синхронизируется…', synced: '✓ Синхронизировано', offline: '○ Офлайн', error: '⚠ Ошибка синхронизации' };
+    status.textContent = user
+      ? '☁️ ' + (user.email || 'Аккаунт') + ' · ' + (detail || labels[state] || labels.offline)
+      : '○ Не вошли · Офлайн';
+    status.dataset.state = state;
+  }
+
   function setMessage(text, type = '') {
     const el = document.getElementById('tutorAuthMessage');
     if (el) {
@@ -190,9 +202,10 @@
     if (document.getElementById('tutorAuthModal')) return;
     const style = document.createElement('style');
     style.textContent = `
-      #tutorAuthBar{position:fixed;top:12px;right:14px;z-index:10000;display:flex;gap:8px;align-items:center}
-      #tutorAuthOpen{border:1px solid #4caf50;background:#fff;color:#2d6d34;border-radius:10px;padding:8px 12px;cursor:pointer;font-weight:700;box-shadow:0 2px 10px #0002}
-      #tutorAuthStatus{font-size:12px;color:#2d6d34;background:#fff;border-radius:9px;padding:7px 9px;box-shadow:0 2px 10px #0002;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #tutorAuthBar{position:fixed;top:12px;right:14px;z-index:10000;display:flex;gap:7px;align-items:center;max-width:calc(100vw - 28px)}
+      #tutorAuthStatus{font-size:12px;color:#2d6d34;background:#fff;border-radius:9px;padding:8px 10px;box-shadow:0 2px 10px #0002;max-width:270px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #tutorAuthBar button{border:1px solid #4caf50;background:#fff;color:#2d6d34;border-radius:9px;padding:8px 10px;cursor:pointer;font-weight:700;white-space:nowrap;box-shadow:0 2px 10px #0002}
+      #tutorAuthBar #tutorLogout{background:#f5f5f5;border-color:#aaa;color:#555;display:none}
       #tutorAuthModal{position:fixed;inset:0;z-index:10001;display:none;place-items:center;background:#0008;padding:16px}
       #tutorAuthModal.open{display:grid}.tutor-auth-card{width:min(410px,100%);background:#fff;border-radius:16px;padding:22px;box-shadow:0 18px 60px #0005}
       .tutor-auth-card h2{margin:0 0 8px;color:#2d6d34;font-size:22px}.tutor-auth-card p{margin:0 0 16px;color:#555;line-height:1.45}
@@ -200,15 +213,21 @@
       .tutor-auth-actions{display:flex;gap:8px;flex-wrap:wrap}.tutor-auth-actions button{flex:1;min-width:130px;padding:10px;border:0;border-radius:9px;cursor:pointer;font-weight:700}
       #tutorSignIn{background:#4caf50;color:#fff}.tutorSignUp{background:#e8f5e9;color:#2d6d34}#tutorSignOut{background:#f5f5f5;color:#555;display:none}
       .tutorAuthClose{float:right;border:0;background:none;font-size:24px;cursor:pointer;color:#777}.tutor-auth-message{min-height:22px;margin:12px 0 0;font-size:13px}
-      .tutor-auth-message.ok{color:#2d6d34}.tutor-auth-message.error{color:#b3261e}@media(max-width:600px){#tutorAuthBar{top:8px;right:8px}#tutorAuthStatus{display:none}}
+      .tutor-auth-message.ok{color:#2d6d34}.tutor-auth-message.error{color:#b3261e}
+      @media(max-width:700px){#tutorAuthBar{top:8px;right:8px;gap:4px}#tutorAuthStatus{max-width:145px;font-size:10px}#tutorAuthBar button{font-size:10px;padding:7px 8px}}
     `;
     document.head.appendChild(style);
     document.body.insertAdjacentHTML('beforeend', `
-      <div id="tutorAuthBar"><span id="tutorAuthStatus">☁️ Локальный режим</span><button id="tutorAuthOpen">☁️ Войти</button></div>
+      <div id="tutorAuthBar">
+        <span id="tutorAuthStatus">○ Не вошли · Офлайн</span>
+        <button id="tutorLogin">Войти</button>
+        <button id="tutorCreate">Создать аккаунт</button>
+        <button id="tutorLogout">Выйти</button>
+      </div>
       <div id="tutorAuthModal" aria-hidden="true"><div class="tutor-auth-card">
         <button class="tutorAuthClose" id="tutorAuthClose" aria-label="Закрыть">×</button>
         <h2>☁️ Облачная синхронизация</h2>
-        <p>Создайте аккаунт, подтвердите email и синхронизируйте все данные приложения на всех устройствах.</p>
+        <p>Войдите или создайте аккаунт, чтобы синхронизировать все данные приложения.</p>
         <input id="tutorAuthEmail" type="email" autocomplete="email" placeholder="Email">
         <input id="tutorAuthPassword" type="password" autocomplete="current-password" placeholder="Пароль (минимум 6 символов)">
         <div class="tutor-auth-actions"><button id="tutorSignIn">Войти</button><button class="tutorSignUp" id="tutorSignUp">Создать аккаунт</button><button id="tutorSignOut">Выйти</button></div>
@@ -216,7 +235,10 @@
       </div></div>
     `);
     const modal = document.getElementById('tutorAuthModal');
-    document.getElementById('tutorAuthOpen').onclick = () => modal.classList.add('open');
+    const openModal = () => modal.classList.add('open');
+    document.getElementById('tutorLogin').onclick = openModal;
+    document.getElementById('tutorCreate').onclick = openModal;
+    document.getElementById('tutorLogout').onclick = signOut;
     document.getElementById('tutorAuthClose').onclick = () => modal.classList.remove('open');
     modal.onclick = event => { if (event.target === modal) modal.classList.remove('open'); };
     document.getElementById('tutorSignIn').onclick = signIn;
@@ -226,21 +248,21 @@
 
   function updateAuthUI() {
     const status = document.getElementById('tutorAuthStatus');
-    const open = document.getElementById('tutorAuthOpen');
-    if (!status || !open) return;
-    const controls = {
-      signIn: document.getElementById('tutorSignIn'),
-      signUp: document.getElementById('tutorSignUp'),
-      signOut: document.getElementById('tutorSignOut')
-    };
+    if (!status) return;
+    const login = document.getElementById('tutorLogin');
+    const create = document.getElementById('tutorCreate');
+    const logout = document.getElementById('tutorLogout');
+    const signInButton = document.getElementById('tutorSignIn');
+    const signUpButton = document.getElementById('tutorSignUp');
+    const signOutButton = document.getElementById('tutorSignOut');
     if (user) {
-      status.textContent = '☁️ ' + (user.email || 'Аккаунт');
-      open.textContent = '☁️ Аккаунт';
-      controls.signIn.style.display = 'none'; controls.signUp.style.display = 'none'; controls.signOut.style.display = 'block';
+      login.style.display = 'none'; create.style.display = 'none'; logout.style.display = '';
+      signInButton.style.display = 'none'; signUpButton.style.display = 'none'; signOutButton.style.display = 'block';
+      setSyncStatus(syncState);
     } else {
-      status.textContent = '☁️ Локальный режим';
-      open.textContent = '☁️ Войти';
-      controls.signIn.style.display = ''; controls.signUp.style.display = ''; controls.signOut.style.display = 'none';
+      login.style.display = ''; create.style.display = ''; logout.style.display = 'none';
+      signInButton.style.display = ''; signUpButton.style.display = ''; signOutButton.style.display = 'none';
+      setSyncStatus('offline');
     }
   }
 
@@ -282,6 +304,7 @@
 
   async function uploadSnapshot(snapshot) {
     if (!user || applyingRemote) return;
+    setSyncStatus('syncing');
     const serialized = JSON.stringify(snapshot);
     if (serialized === lastUploaded) return;
     const { error } = await client.from(DATA_TABLE).upsert(
@@ -295,9 +318,11 @@
       { user_id: user.id, id: 'finance', data: snapshot.tutor_mvp_state_v5 || {}, updated_at: new Date().toISOString() }
     ], { onConflict: 'user_id,id' });
     lastUploaded = serialized;
+    setSyncStatus('synced');
   }
 
   async function loadRemote() {
+    setSyncStatus('syncing');
     const { data, error } = await client.from(DATA_TABLE).select('id,data,updated_at').eq('user_id', user.id);
     if (error) throw error;
     const legacyRows = {};
@@ -322,7 +347,7 @@
       try {
         const local = snapshotLocal();
         await uploadSnapshot(local);
-      } catch (error) { console.warn('Tutor cloud sync failed:', error); }
+      } catch (error) { setSyncStatus('error'); console.warn('Tutor cloud sync failed:', error); }
     }, 700);
   }
 
@@ -346,6 +371,7 @@
 
   async function onSession(session) {
     user = session?.user || null;
+    syncState = user ? 'syncing' : 'offline';
     updateAuthUI();
     if (!user) {
       if (channel) { client.removeChannel(channel); channel = null; }
@@ -357,6 +383,7 @@
       setupRealtime();
       setMessage('Облако синхронизировано.', 'ok');
     } catch (error) {
+      setSyncStatus('error');
       console.warn('Tutor cloud initialization failed:', error);
       setMessage('Облако недоступно: ' + (error.message || 'ошибка синхронизации'), 'error');
     }
@@ -378,6 +405,8 @@
   async function init() {
     ensureAuthUI();
     updateAuthUI();
+    window.addEventListener('offline', () => { setSyncStatus('offline'); });
+    window.addEventListener('online', () => { if (user) scheduleSync(); });
     if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY || SUPABASE_URL.includes('__SUPABASE')) {
       setMessage('Supabase ещё не подключён.', 'error');
       return;
