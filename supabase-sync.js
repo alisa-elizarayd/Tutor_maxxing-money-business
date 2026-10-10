@@ -177,12 +177,16 @@
 
   function setSyncStatus(state, detail = '') {
     syncState = state;
-    const status = document.getElementById('tutorAuthStatus');
-    if (!status) return;
-    const labels = { syncing: '⟳ Синхронизируется…', synced: '✓ Синхронизировано', offline: '○ Офлайн', error: '⚠ Ошибка синхронизации' };
-    status.textContent = user
-      ? '☁️ ' + (user.email || 'Аккаунт') + ' · ' + (detail || labels[state] || labels.offline)
-      : '○ Не вошли · Офлайн';
+    const status = document.getElementById('tutorSyncStatus');
+    const text = document.getElementById('tutorSyncStatusText');
+    if (!status || !text) return;
+    const labels = {
+      syncing: 'Статус: Синхронизируется…',
+      synced: 'Статус: Синхронизировано',
+      offline: 'Статус: Офлайн',
+      error: 'Статус: Ошибка синхронизации'
+    };
+    text.textContent = detail || labels[state] || labels.offline;
     status.dataset.state = state;
   }
 
@@ -202,8 +206,15 @@
     if (document.getElementById('tutorAuthModal')) return;
     const style = document.createElement('style');
     style.textContent = `
-      #tutorAuthBar{position:fixed;top:10px;right:14px;z-index:10000;display:flex;gap:7px;align-items:center;justify-content:flex-end;flex-wrap:wrap;max-width:min(520px,calc(100vw - 28px))}
-      #tutorAuthStatus{font-size:14px;color:#245b2b;background:#fff;border-radius:10px;padding:10px 14px;box-shadow:0 2px 12px #0003;min-width:220px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      #tutorAuthBar{position:fixed;top:10px;right:14px;z-index:10000;display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;max-width:min(700px,calc(100vw - 28px));font-family:inherit}
+      #tutorAccountStatus,#tutorSyncStatus{display:inline-flex;align-items:center;gap:7px;background:#fff;border-radius:10px;padding:10px 13px;box-shadow:0 2px 12px #0003;font-size:14px;font-weight:700;white-space:nowrap}
+      #tutorAccountStatus{color:#245b2b;max-width:280px;overflow:hidden;text-overflow:ellipsis}
+      #tutorSyncStatus{color:#555;min-width:230px}
+      #tutorSyncStatus[data-state="synced"]{color:#176b2a;background:#eef9ef}
+      #tutorSyncStatus[data-state="syncing"]{color:#7a5600;background:#fff8dc}
+      #tutorSyncStatus[data-state="offline"]{color:#666;background:#f3f3f3}
+      #tutorSyncStatus[data-state="error"]{color:#a62222;background:#fff0f0}
+      .tutor-status-dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:0 0 auto}
       #tutorAuthBar button{display:inline-flex;align-items:center;justify-content:center;border:1px solid #4caf50;background:#fff;color:#245b2b;border-radius:10px;padding:10px 13px;cursor:pointer;font-size:14px;font-weight:700;white-space:nowrap;box-shadow:0 2px 12px #0003}
       #tutorAuthBar #tutorLogout{background:#fff4f4;border-color:#b3261e;color:#9b1c1c;display:none}
       #tutorAuthModal{position:fixed;inset:0;z-index:10001;display:none;place-items:center;background:#0008;padding:16px}
@@ -214,12 +225,13 @@
       #tutorSignIn{background:#4caf50;color:#fff}.tutorSignUp{background:#e8f5e9;color:#2d6d34}#tutorSignOut{background:#f5f5f5;color:#555;display:none}
       .tutorAuthClose{float:right;border:0;background:none;font-size:24px;cursor:pointer;color:#777}.tutor-auth-message{min-height:22px;margin:12px 0 0;font-size:13px}
       .tutor-auth-message.ok{color:#2d6d34}.tutor-auth-message.error{color:#b3261e}
-      @media(max-width:700px){#tutorAuthBar{top:8px;right:8px;max-width:calc(100vw - 16px)}#tutorAuthStatus{min-width:0;max-width:calc(100vw - 16px);font-size:12px;padding:8px 10px}#tutorAuthBar button{font-size:12px;padding:8px 10px}}#tutorAuthStatus{max-width:145px;font-size:10px}#tutorAuthBar button{font-size:10px;padding:7px 8px}}
+      @media(max-width:700px){#tutorAuthBar{top:8px;right:8px;max-width:calc(100vw - 16px);gap:5px}#tutorAccountStatus,#tutorSyncStatus{font-size:12px;padding:8px 10px}#tutorAccountStatus{max-width:calc(100vw - 16px)}#tutorSyncStatus{min-width:0;flex:1}#tutorAuthBar button{font-size:12px;padding:8px 10px}}
     `;
     document.head.appendChild(style);
     document.body.insertAdjacentHTML('beforeend', `
       <div id="tutorAuthBar">
-        <span id="tutorAuthStatus">○ Не вошли · Офлайн</span>
+        <div id="tutorAccountStatus">Аккаунт: не выполнен вход</div>
+        <div id="tutorSyncStatus" data-state="offline"><span class="tutor-status-dot"></span><span id="tutorSyncStatusText">Статус: Офлайн</span></div>
         <button id="tutorLogin">Войти</button>
         <button id="tutorCreate">Создать аккаунт</button>
         <button id="tutorLogout">Выйти</button>
@@ -247,8 +259,8 @@
   }
 
   function updateAuthUI() {
-    const status = document.getElementById('tutorAuthStatus');
-    if (!status) return;
+    const userStatus = document.getElementById('tutorAccountStatus');
+    if (!userStatus) return;
     const login = document.getElementById('tutorLogin');
     const create = document.getElementById('tutorCreate');
     const logout = document.getElementById('tutorLogout');
@@ -256,12 +268,21 @@
     const signUpButton = document.getElementById('tutorSignUp');
     const signOutButton = document.getElementById('tutorSignOut');
     if (user) {
-      login.style.display = 'none'; create.style.display = 'none'; logout.style.display = 'inline-flex';
-      signInButton.style.display = 'none'; signUpButton.style.display = 'none'; signOutButton.style.display = 'block';
-      setSyncStatus(syncState);
+      userStatus.textContent = 'Аккаунт: ' + (user.email || 'выполнен вход');
+      login.style.display = 'none';
+      create.style.display = 'none';
+      logout.style.display = 'inline-flex';
+      signInButton.style.display = 'none';
+      signUpButton.style.display = 'none';
+      signOutButton.style.display = 'block';
     } else {
-      login.style.display = ''; create.style.display = ''; logout.style.display = 'none';
-      signInButton.style.display = ''; signUpButton.style.display = ''; signOutButton.style.display = 'none';
+      userStatus.textContent = 'Аккаунт: не выполнен вход';
+      login.style.display = 'inline-flex';
+      create.style.display = 'inline-flex';
+      logout.style.display = 'none';
+      signInButton.style.display = '';
+      signUpButton.style.display = '';
+      signOutButton.style.display = 'none';
       setSyncStatus('offline');
     }
   }
