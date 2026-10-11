@@ -1786,7 +1786,7 @@ body{
               id: syncId(),
               seriesId: null,
               date: financeLesson.date,
-              time: student.time || template.time || '20:00',
+              time: financeLesson.time || student.time || template.time || '20:00',
               name: student.name,
               plan: '', homeworkGiven: '', homeworkLink: '', homeworkNext: '',
               link: template.link || '', color: financeColor,
@@ -1801,8 +1801,9 @@ body{
             delete calendarLesson.calendarOnly;
             delete calendarLesson.calendarOnlyAfterScheduleEdit;
             calendarLesson.date = financeLesson.date;
-            if(student.time) calendarLesson.time = student.time;
-            calendarLesson.color = financeColor;
+            if(financeLesson.time) calendarLesson.time = financeLesson.time;
+            else if(student.time) calendarLesson.time = student.time;
+            if(!calendarLesson.color) calendarLesson.color = financeColor;
             if(sourceCalendarLesson && !calendarLesson.time) calendarLesson.time = sourceCalendarLesson.time;
           }
           calendarLesson.financeStatus = financeLesson.status;
@@ -2225,7 +2226,9 @@ body{
           const tYear = targetDate.getFullYear();
           const tMonth = targetDate.getMonth();
           const daysInTargetMonth = new Date(tYear, tMonth + 1, 0).getDate();
-          for(let d = 1; d <= daysInTargetMonth; d++){
+          const firstDay = monthOffset === 0 && selectedDate
+            ? Math.max(1, Number(selectedDate.slice(-2))) : 1;
+          for(let d = firstDay; d <= daysInTargetMonth; d++){
             const loopDate = new Date(tYear, tMonth, d);
             const dayOfWeek = loopDate.getDay();
             if(days.includes(dayOfWeek)){
@@ -2260,7 +2263,7 @@ body{
             time: item.time
           }))),
           rate: lessonRate,
-          startDate: createdDates.sort()[0] || selectedDate || todayISO()
+          startDate: selectedDate || todayISO()
         });
         if(financeStudent){
           lessons.forEach(lesson => {
@@ -2900,6 +2903,10 @@ body{
           financeLesson.date = calendarLesson.date;
           changed = true;
         }
+        if(calendarLesson.time && financeLesson.time !== calendarLesson.time){
+          financeLesson.time = calendarLesson.time;
+          changed = true;
+        }
         if(calendarLesson.financeStudentId !== student.id ||
           calendarLesson.financeLessonId !== financeLesson.id){
           calendarLesson.financeStudentId = student.id;
@@ -3254,6 +3261,23 @@ body{
     save(); render();
   };
 
+  window.editPaymentStart = function(studentId, paymentId){
+    const s = state.students.find(x => x.id === studentId);
+    const p = s && s.payments.find(x => x.id === paymentId);
+    if(!s || !p) return;
+    const next = prompt('Новая дата начала абонемента (ГГГГ-ММ-ДД):', p.startDate || p.date || todayISO());
+    if(!next || !/^\d{4}-\d{2}-\d{2}$/.test(next)) return;
+    const parsed = new Date(next + 'T00:00:00');
+    if(Number.isNaN(parsed.getTime()) || toISO(parsed) !== next){ alert('Укажите существующую дату.'); return; }
+    pushUndo(`Изменение даты абонемента «${s.name}»`);
+    p.startDate = next;
+    s.lessons = s.lessons.filter(l => l.paymentId !== paymentId || l.generatedByMoveId || l.generatedByCancelId);
+    buildLessonsForPayment(s, next, Number(p.lessons) || 0, paymentId);
+    s.scheduleStart = [...s.payments].map(x => x.startDate || x.date).filter(Boolean).sort()[0] || next;
+    recalcLessons(s);
+    save(); render();
+  };
+
   function buildLessonsForPayment(student, startDate, count, paymentId){
     const existing = new Set(student.lessons.map(l=>l.date));
     const cursor = new Date(startDate+'T00:00:00');
@@ -3265,7 +3289,7 @@ body{
       if(student.days.includes(wd)){
         const iso = toISO(cursor);
         if(!existing.has(iso)){
-          student.lessons.push({ id:uid(), date:iso, status:'planned', movedFrom:null, paymentId: paymentId || null, entitlementId: uid() });
+          student.lessons.push({ id:uid(), date:iso, time:student.time || '', status:'planned', movedFrom:null, paymentId: paymentId || null, entitlementId: uid() });
           existing.add(iso);
           added++;
         }
@@ -3470,7 +3494,7 @@ body{
   }
 
 
-  function pickMoveDate(defaultDate){
+  function pickMoveDate(defaultDate, defaultTime){
     return new Promise(resolve => {
       const overlay = document.createElement('div');
       overlay.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:20px;';
@@ -3483,6 +3507,9 @@ body{
         <div style="font-size:12px;color:#777;margin-bottom:14px">Выберите новую дату</div>
         <input id="moveDatePicker" type="date" value="${defaultDate || todayISO()}"
           style="width:100%;height:46px;padding:8px 10px;border:1px solid #d8d8df;border-radius:10px;font-size:16px;background:#fff;color:#333">
+        <label style="display:block;font-size:12px;color:#777;margin-top:12px;margin-bottom:5px">Время нового урока</label>
+        <input id="moveTimePicker" type="time" value="${defaultTime || '18:00'}"
+          style="width:100%;height:46px;padding:8px 10px;border:1px solid #d8d8df;border-radius:10px;font-size:16px;background:#fff;color:#333">
         <div style="display:flex;gap:8px;margin-top:14px">
           <button id="moveDateCancel" type="button" style="flex:1;padding:10px;border:1px solid #ddd;border-radius:9px;background:#f5f5f7;color:#555;font-weight:600">Отмена</button>
           <button id="moveDateOk" type="button" style="flex:1;padding:10px;border:0;border-radius:9px;background:#7B509F;color:#fff;font-weight:700">Перенести</button>
@@ -3493,9 +3520,10 @@ body{
       document.body.appendChild(overlay);
 
       const input = box.querySelector('#moveDatePicker');
+      const timeInput = box.querySelector('#moveTimePicker');
       const finish = value => {
         overlay.remove();
-        resolve(value || null);
+        resolve(value ? { date: value, time: timeInput.value || null } : null);
       };
 
       box.querySelector('#moveDateCancel').onclick = () => finish(null);
@@ -3551,10 +3579,11 @@ body{
     const previousStatus = l.status;
 
     if(status === 'free-move' || status === 'paid-move'){
-      const nd = await pickMoveDate(l.movedTo || l.date);
-      if(!nd) return;
+      const moved = await pickMoveDate(l.movedTo || l.date, l.time || s.time || '18:00');
+      if(!moved) return;
 
-      const normalizedDate = nd.trim();
+      const normalizedDate = moved.date.trim();
+      const normalizedTime = moved.time || l.time || s.time || '18:00';
       if(!/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)){
         alert('Введите корректную дату.');
         return;
@@ -3583,6 +3612,7 @@ body{
         id: uid(),
         date: normalizedDate,
         status: 'planned',
+        time: normalizedTime,
         movedFrom: l.date,
         generatedByMoveId: l.id,
         moveType: status === 'free-move' ? 'free' : 'paid',
@@ -3831,6 +3861,7 @@ body{
                   <span class="sub-icon">💳</span>
                   <span class="sub-label">Абонемент #${block.index + 1}</span>
                   <span class="sub-date">от ${fmtDate(p.startDate || p.date)}</span>
+                  <button type="button" class="btn btn-secondary tiny" onclick="editPaymentStart('${s.id}','${p.id}')">Изменить дату</button>
                   <span class="sub-count">${block.entitlements} / ${p.lessons} ур.</span>
                 </div>
                 ${numberedLessons.map(row => lessonHTML(s.id, row.lesson, today, row.number)).join('')}
@@ -4251,6 +4282,6 @@ body{
 })();
 </script>
 
-<script src="supabase-sync.js?v=20261010-12"></script>
+<script src="supabase-sync.js?v=20261011-01"></script>
 </body>
 </html>
