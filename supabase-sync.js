@@ -18,7 +18,7 @@
   };
   // Background images can be multi-megabyte data URLs. Keep them local;
   // business data and lightweight settings continue syncing normally.
-  const LOCAL_ONLY_KEYS = new Set(['tutorBg']);
+  const LOCAL_ONLY_KEYS = new Set(['tutorBg', SYNC_BASE_KEY]);
 
   let client = null;
   let user = null;
