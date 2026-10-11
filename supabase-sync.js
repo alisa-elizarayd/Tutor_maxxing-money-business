@@ -11,6 +11,7 @@
   const CDN = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
   const DATA_TABLE = 'user_data';
   const SNAPSHOT_ID = 'app_state';
+  const SYNC_BASE_KEY = 'tutorSyncBase';
   const LEGACY_KEYS = {
     calendar: 'tutorLessonsPro',
     finance: 'tutor_mvp_state_v5'
@@ -44,6 +45,18 @@
       }
     }
     return snapshot;
+  }
+
+  function snapshotSignature(snapshot) {
+    return JSON.stringify(snapshot || {});
+  }
+
+  function readSyncBase() {
+    try { return localStorage.getItem(SYNC_BASE_KEY) || ''; } catch { return ''; }
+  }
+
+  function saveSyncBase(snapshot) {
+    try { localStorage.setItem(SYNC_BASE_KEY, snapshotSignature(snapshot)); } catch {}
   }
 
   function hasAppContent(snapshot) {
@@ -201,6 +214,28 @@
       tutorLessonsPro: calendar,
       tutor_mvp_state_v5: finance
     };
+  }
+
+  function resolveSnapshot(remoteSnapshot, localSnapshot, legacyRows) {
+    const remote = remoteSnapshot && typeof remoteSnapshot === 'object' ? remoteSnapshot : {};
+    const local = localSnapshot && typeof localSnapshot === 'object' ? localSnapshot : {};
+    const baseSignature = readSyncBase();
+    const localSignature = snapshotSignature(local);
+    const remoteSignature = snapshotSignature(remote);
+    const hasCanonicalRemote = Object.prototype.hasOwnProperty.call(remote, 'tutorLessonsPro') ||
+      Object.prototype.hasOwnProperty.call(remote, 'tutor_mvp_state_v5');
+
+    // Empty canonical arrays are meaningful: they can represent an intentional
+    // "delete all". Never resurrect stale browser cache data into that state.
+    if(!baseSignature && hasCanonicalRemote) return remote;
+    if(baseSignature){
+      const localChanged = localSignature !== baseSignature;
+      const remoteChanged = remoteSignature !== baseSignature;
+      if(localChanged && !remoteChanged) return local;
+      if(!localChanged && remoteChanged) return remote;
+      if(!localChanged && !remoteChanged) return remote;
+    }
+    return mergeSnapshots(remote, local, legacyRows);
   }
 
   function notifyApp() {
@@ -431,6 +466,7 @@
     // read only for one-time recovery, so normal sync uses one write instead
     // of three and avoids unnecessary rate-limit pressure.
     lastUploaded = serialized;
+    saveSyncBase(snapshot);
     setSyncStatus('synced');
   }
 
@@ -445,11 +481,13 @@
       if (row.id === 'calendar') legacyRows.calendar = row.data || [];
       if (row.id === 'finance') legacyRows.finance = row.data || {};
     }
-    const merged = mergeSnapshots(remoteSnapshot, snapshotLocal(), legacyRows);
+    const localSnapshot = snapshotLocal();
+    const merged = resolveSnapshot(remoteSnapshot, localSnapshot, legacyRows);
     applyingRemote = true;
     writeSnapshot(merged);
     applyingRemote = false;
     notifyApp();
+    saveSyncBase(merged);
     await uploadSnapshot(merged);
   }
 
@@ -485,11 +523,12 @@
           if (payload.new?.id !== SNAPSHOT_ID || !payload.new?.data) return;
           const incoming = payload.new.data;
           if (JSON.stringify(incoming) === lastUploaded) return;
-          const merged = mergeSnapshots(incoming, snapshotLocal(), {});
+          const merged = resolveSnapshot(incoming, snapshotLocal(), {});
           applyingRemote = true;
           writeSnapshot(merged);
           applyingRemote = false;
           lastUploaded = JSON.stringify(merged);
+          saveSyncBase(merged);
           notifyApp();
           setSyncStatus('synced');
         })
