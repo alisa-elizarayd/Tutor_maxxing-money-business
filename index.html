@@ -723,6 +723,12 @@ body{
 #view-finance .subscription-header .sub-date{
   font-size:10px;color:var(--muted);font-weight:normal;
 }
+#view-finance .subscription-header .sub-date-edit{
+  display:inline-flex;align-items:center;gap:4px;font-size:10px;color:var(--muted);font-weight:normal;
+}
+#view-finance .subscription-header .sub-date-edit input{
+  width:112px;padding:3px 5px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:inherit;font:inherit;
+}
 #view-finance .subscription-block.sub-0 .subscription-header{
   background:linear-gradient(90deg,rgba(80,159,84,.12),rgba(80,159,84,.02));
   border-bottom-color:rgba(80,159,84,.18);color:var(--green);
@@ -2199,7 +2205,18 @@ body{
       const slot = scheduleSlotsContainer.querySelector('.schedule-slot');
       const { time } = slot.getData();
       const index = lessons.findIndex(l => l.id === editingId);
-      if(index !== -1) lessons[index] = { ...lessons[index], ...formData, time: time || lessons[index].time };
+      if(index !== -1){
+        const editedLesson = lessons[index];
+        lessons[index] = { ...editedLesson, ...formData, time: time || editedLesson.time };
+        // The colour belongs to the pupil/series, not to one calendar cell.
+        // Update every linked lesson so the visual identity stays consistent.
+        const linkedLessons = editedLesson.financeStudentId
+          ? lessons.filter(item => item.financeStudentId === editedLesson.financeStudentId)
+          : editedLesson.seriesId
+            ? lessons.filter(item => item.seriesId === editedLesson.seriesId)
+            : [lessons[index]];
+        linkedLessons.forEach(item => { item.color = formData.color; });
+      }
     } else {
       const slots = Array.from(scheduleSlotsContainer.querySelectorAll('.schedule-slot'));
       const extendCount = extendMonthsCheckbox.checked ? parseInt(extendMonthsCount.value) : 0;
@@ -2233,6 +2250,7 @@ body{
             const dayOfWeek = loopDate.getDay();
             if(days.includes(dayOfWeek)){
               const dateStr = `${tYear}-${String(tMonth + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+              if(selectedDate && dateStr < selectedDate) continue;
               const exists = lessons.some(l => l.date === dateStr && l.name === name && l.time === time);
               if(!exists){
                 const isInitialDay = (dateStr === selectedDate);
@@ -3261,11 +3279,11 @@ body{
     save(); render();
   };
 
-  window.editPaymentStart = function(studentId, paymentId){
+  window.editPaymentStart = function(studentId, paymentId, requestedDate){
     const s = state.students.find(x => x.id === studentId);
     const p = s && s.payments.find(x => x.id === paymentId);
     if(!s || !p) return;
-    const next = prompt('Новая дата начала абонемента (ГГГГ-ММ-ДД):', p.startDate || p.date || todayISO());
+    const next = requestedDate || prompt('Новая дата начала абонемента (ГГГГ-ММ-ДД):', p.startDate || p.date || todayISO());
     if(!next || !/^\d{4}-\d{2}-\d{2}$/.test(next)) return;
     const parsed = new Date(next + 'T00:00:00');
     if(Number.isNaN(parsed.getTime()) || toISO(parsed) !== next){ alert('Укажите существующую дату.'); return; }
@@ -3358,6 +3376,21 @@ body{
   // missing future dates.
   function ensurePaidScheduleComplete(student){
     ensureLessonEntitlements(student);
+    const paymentStarts = student.payments
+      .map(payment => payment.startDate || payment.date)
+      .filter(Boolean)
+      .sort();
+    const firstPaymentDate = paymentStarts[0];
+    if(firstPaymentDate){
+      // Never count an uncompleted lesson before the first paid abonement.
+      // Such rows can exist in older data after a calendar-only pupil was
+      // linked to Finance; they make the balance and first lesson date wrong.
+      student.lessons = student.lessons.filter(lesson =>
+        lesson.date >= firstPaymentDate ||
+        lesson.generatedByMoveId || lesson.generatedByCancelId ||
+        !['planned','unpaid','beyond'].includes(lesson.status)
+      );
+    }
     const totalPaid = student.payments.reduce((sum,p)=>sum + (Number(p.lessons) || 0), 0);
     let groups = getEntitlementGroups(student);
     if(groups.length >= totalPaid) return;
@@ -3386,7 +3419,7 @@ body{
 
       const payment = paymentForIndex(groups.length);
       student.lessons.push({
-        id: uid(), date: cursor, status: 'planned', movedFrom: null,
+        id: uid(), date: cursor, time: student.time || '', status: 'planned', movedFrom: null,
         paymentId: payment ? payment.id : null, entitlementId: uid()
       });
       occupied.add(cursor);
@@ -3861,7 +3894,9 @@ body{
                   <span class="sub-icon">💳</span>
                   <span class="sub-label">Абонемент #${block.index + 1}</span>
                   <span class="sub-date">от ${fmtDate(p.startDate || p.date)}</span>
-                  <button type="button" class="btn btn-secondary tiny" onclick="editPaymentStart('${s.id}','${p.id}')">Изменить дату</button>
+                  <label class="sub-date-edit">Дата начала
+                    <input type="date" value="${p.startDate || p.date || today}" onchange="editPaymentStart('${s.id}','${p.id}',this.value)">
+                  </label>
                   <span class="sub-count">${block.entitlements} / ${p.lessons} ур.</span>
                 </div>
                 ${numberedLessons.map(row => lessonHTML(s.id, row.lesson, today, row.number)).join('')}
