@@ -358,7 +358,7 @@
       bar.classList.remove('open');
       cloudToggle.setAttribute('aria-expanded', 'false');
     };
-    const openModal = () => { closePanel(); modal.classList.add('open'); };
+    const openModal = () => { closePanel(); if (!user) setMessage('', ''); modal.classList.add('open'); };
     cloudToggle.onclick = () => {
       const open = !bar.classList.contains('open');
       bar.classList.toggle('open', open);
@@ -406,6 +406,8 @@
       signUpButton.style.display = '';
       signOutButton.style.display = 'none';
       setSyncStatus('offline');
+      // Не показываем старую ошибку предыдущей сессии в новом окне входа.
+      setMessage('', '');
     }
   }
 
@@ -442,7 +444,11 @@
     if (!client) return;
     setBusy(true);
     try { await client.auth.signOut(); }
-    finally { setBusy(false); document.getElementById('tutorAuthModal').classList.remove('open'); }
+    finally {
+      setBusy(false);
+      setMessage('', '');
+      document.getElementById('tutorAuthModal').classList.remove('open');
+    }
   }
 
   async function uploadSnapshot(snapshot) {
