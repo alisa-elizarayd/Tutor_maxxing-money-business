@@ -195,9 +195,17 @@ body{
 #view-calendar #monthSelect option { color: #333; background: #fff; }
 
 #view-calendar .calendar-grid {
-  display: grid; grid-template-columns: repeat(7, 1fr);
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 5px; padding: 10px; max-width: 900px; margin: 0 auto;
 }
+.calendar-scroll { max-width: 100%; overflow-x: auto; }
+.calendar-scroll-hint { display: none; }
+@media (max-width: 600px) {
+  #view-calendar .calendar-grid { min-width: 650px; }
+  .calendar-scroll-hint { display: block; padding: 4px 12px 0; color: var(--text-secondary); font-size: .72rem; text-align: right; }
+}
+#view-calendar .day-header, #view-calendar .day-cell,
+#view-calendar .student-card { min-width: 0; }
 #view-calendar .day-header {
   text-align: center; font-size: 0.75rem; color: var(--text-secondary);
   font-weight: 600; padding: 8px 0;
@@ -243,7 +251,8 @@ body{
 #view-calendar .finance-status{
   display:inline-flex; align-items:center; gap:3px; margin-top:2px;
   padding:1px 5px; border-radius:10px; font-size:.55rem; font-weight:700;
-  line-height:1.25; white-space:nowrap;
+  line-height:1.25; white-space:nowrap; max-width:100%; overflow:hidden;
+  text-overflow:ellipsis;
 }
 #view-calendar .finance-status.paid{background:rgba(80,159,84,.16);color:#2e7d32;}
 #view-calendar .finance-status.unpaid{background:rgba(230,126,34,.16);color:#b85c00;}
@@ -936,7 +945,8 @@ body{
     </div>
   </header>
 
-  <div class="calendar-grid" id="calendarGrid"></div>
+  <div class="calendar-scroll-hint">Прокрутите календарь вправо →</div>
+  <div class="calendar-scroll"><div class="calendar-grid" id="calendarGrid"></div></div>
 
   <button class="fab" id="addFab">+</button>
   <div class="overlay" id="overlay"></div>
@@ -1547,6 +1557,39 @@ body{
     }
   }
 
+  function compactBackground(source){
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onerror = () => reject(new Error('Не удалось прочитать изображение'));
+      image.onload = () => {
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        const context = canvas.getContext('2d');
+        if(!context) return reject(new Error('Не удалось обработать изображение'));
+        context.fillStyle = '#fff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        let compact = canvas.toDataURL('image/jpeg', .8);
+        if(compact.length > 900000) compact = canvas.toDataURL('image/jpeg', .55);
+        resolve(compact);
+      };
+      image.src = source;
+    });
+  }
+
+  if(currentBg.startsWith('data:image') && currentBg.length > 900000){
+    compactBackground(currentBg).then(compact => {
+      if(compact.length >= currentBg.length) return;
+      try {
+        localStorage.setItem('tutorBg', compact);
+        currentBg = compact;
+        applyBackground();
+      } catch(error) { console.warn('Не удалось уменьшить фоновое изображение:', error); }
+    }).catch(error => console.warn('Не удалось уменьшить фоновое изображение:', error));
+  }
+
   function renderPatternGrid(){
     patternGridContainer.innerHTML = '';
     const groups = {};
@@ -1795,7 +1838,7 @@ body{
               time: financeLesson.time || student.time || template.time || '20:00',
               name: student.name,
               plan: '', homeworkGiven: '', homeworkLink: '', homeworkNext: '',
-              link: template.link || '', color: financeColor,
+              link: template.link || '', color: template.color || financeColor,
               emoji: template.emoji || '📚',
               financeStudentId: student.id,
               financeLessonId: financeLesson.id
@@ -2220,6 +2263,9 @@ body{
     } else {
       const slots = Array.from(scheduleSlotsContainer.querySelectorAll('.schedule-slot'));
       const extendCount = extendMonthsCheckbox.checked ? parseInt(extendMonthsCount.value) : 0;
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+      const seriesStartDate = selectedDate || today;
       let createdAny = false;
       let totalCreated = 0;
 
@@ -2243,14 +2289,14 @@ body{
           const tYear = targetDate.getFullYear();
           const tMonth = targetDate.getMonth();
           const daysInTargetMonth = new Date(tYear, tMonth + 1, 0).getDate();
-          const firstDay = monthOffset === 0 && selectedDate
-            ? Math.max(1, Number(selectedDate.slice(-2))) : 1;
+          const firstDay = monthOffset === 0 && seriesStartDate.startsWith(`${tYear}-${String(tMonth + 1).padStart(2,'0')}`)
+            ? Math.max(1, Number(seriesStartDate.slice(-2))) : 1;
           for(let d = firstDay; d <= daysInTargetMonth; d++){
             const loopDate = new Date(tYear, tMonth, d);
             const dayOfWeek = loopDate.getDay();
             if(days.includes(dayOfWeek)){
               const dateStr = `${tYear}-${String(tMonth + 1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-              if(selectedDate && dateStr < selectedDate) continue;
+              if(dateStr < seriesStartDate) continue;
               const exists = lessons.some(l => l.date === dateStr && l.name === name && l.time === time);
               if(!exists){
                 const isInitialDay = (dateStr === selectedDate);
@@ -2281,7 +2327,7 @@ body{
             time: item.time
           }))),
           rate: lessonRate,
-          startDate: selectedDate || todayISO()
+          startDate: seriesStartDate
         });
         if(financeStudent){
           lessons.forEach(lesson => {
@@ -2513,10 +2559,16 @@ body{
     const file = e.target.files[0];
     if(!file) return;
     const reader = new FileReader();
-    reader.onload = (event) => {
-      currentBg = event.target.result;
-      localStorage.setItem('tutorBg', currentBg);
-      applyBackground();
+    reader.onload = async (event) => {
+      try {
+        const compact = await compactBackground(event.target.result);
+        if(compact.length > 900000) throw new Error('Изображение слишком большое даже после сжатия');
+        localStorage.setItem('tutorBg', compact);
+        currentBg = compact;
+        applyBackground();
+      } catch(error) {
+        alert('Не удалось сохранить фон: ' + error.message + '. Попробуйте изображение меньшего размера.');
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -2770,6 +2822,20 @@ body{
   applyBackground();
   renderEmojiPicker();
   window.addEventListener('finance-state-changed', renderCalendar);
+  window.addEventListener('calendar-state-changed', () => {
+    try {
+      const storedLessons = JSON.parse(localStorage.getItem('tutorLessonsPro') || '[]');
+      lessons = Array.isArray(storedLessons) ? storedLessons : [];
+    } catch(error) {
+      console.warn('Не удалось обновить календарь из хранилища:', error);
+    }
+    currentTheme = localStorage.getItem('tutorTheme') || 'light';
+    currentSize = localStorage.getItem('tutorSize') || 'normal';
+    hideIndicator = localStorage.getItem('tutorHideIndicator') === 'true';
+    currentBg = localStorage.getItem('tutorBg') || 'none';
+    applyTheme(); applySize(); applyIndicator(); applyBackground();
+    renderCalendar();
+  });
   renderCalendar();
   updateUndoBtn();
 // === АВТОСОХРАНЕНИЕ (для iOS Safari) ===
@@ -2876,6 +2942,15 @@ body{
         );
         if(!student) return;
 
+        // Editing a subscription rebuilds its financial lessons. A calendar
+        // card still pointing at a removed lesson must stay a calendar plan,
+        // otherwise the old date is imported back into Finance on next save.
+        if(calendarLesson.financeLessonId && !student.lessons.some(lesson => lesson.id === calendarLesson.financeLessonId)){
+          delete calendarLesson.financeLessonId;
+          calendarLesson.calendarOnly = true;
+          changed = true;
+        }
+
         // A calendar plan is a schedule template, not a financial lesson.
         // It becomes a finance lesson only when an abonement is paid and the
         // finance side creates/links the corresponding lesson by ID/date.
@@ -2952,17 +3027,19 @@ body{
           changed = true;
         }
 
-        if(!student.scheduleStart || calendarLesson.date < student.scheduleStart){
+        if((!student.payments || student.payments.length === 0) &&
+          (!student.scheduleStart || calendarLesson.date < student.scheduleStart)){
           student.scheduleStart = calendarLesson.date;
           changed = true;
         }
-        const weekday = DAYS[(new Date(calendarLesson.date+'T00:00:00').getDay()+6)%7];
-        if(!student.days.includes(weekday)){
-          student.days.push(weekday);
-          changed = true;
-        }
+        // A one-off moved lesson changes this lesson's date, not the student's
+        // recurring weekdays. The recurring schedule is edited explicitly in
+        // the student settings or when the calendar series is created.
       });
-      if(changed) save();
+      if(changed){
+        localStorage.setItem('tutorLessonsPro', JSON.stringify(calendarLessons));
+        save();
+      }
     } finally {
       syncingFromCalendar = false;
     }
@@ -4317,6 +4394,6 @@ body{
 })();
 </script>
 
-<script src="supabase-sync.js?v=20261013-01"></script>
+<script src="supabase-sync.js?v=20261013-03"></script>
 </body>
 </html>
