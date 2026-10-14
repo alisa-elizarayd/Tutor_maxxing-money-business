@@ -242,6 +242,7 @@ body{
 #view-calendar .selection-toolbar .selection-count{font-size:.72rem;color:var(--text-secondary);}
 #view-calendar .selection-toolbar .hidden{display:none!important;}
 #view-calendar .selection-toolbar .btn-paid{background:#509F54;color:#fff;border-color:#509F54;}
+#view-calendar .selection-toolbar .btn-clear-all{background:#fff0f0;color:#b3261e;border:1px solid #e57373;}
 #view-calendar .student-card .card-header {
   font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   display: flex; align-items: center; gap: 3px;
@@ -934,6 +935,7 @@ body{
       <button class="btn btn-secondary" type="button" id="selectLessonsBtn">☑ Выбрать уроки</button>
       <button class="btn btn-paid hidden" type="button" id="markSelectedPaidBtn">✓ Отметить оплаченными</button>
       <button class="btn btn-danger hidden" type="button" id="deleteSelectedBtn">🗑 Удалить выбранные</button>
+      <button class="btn btn-clear-all hidden" type="button" id="deleteAllLessonsBtn">🗑 Удалить все уроки</button>
       <span class="selection-count" id="selectionCount"></span>
     </div>
     <div class="month-navigation">
@@ -1231,11 +1233,12 @@ body{
   let lastSavedState = '';
   let syncingFromCalendar = false;
 
-  function pushUndo(label){
+  function pushUndo(label, extra = {}){
     undoStack.push({
       lessons: JSON.parse(JSON.stringify(lessons)),
       label,
-      time: Date.now()
+      time: Date.now(),
+      ...extra
     });
     if(undoStack.length > UNDO_LIMIT) undoStack.shift();
     updateUndoBtn();
@@ -1260,6 +1263,9 @@ body{
     if(!confirm(confirmMsg)){ undoStack.push(last); return; }
     lessons = last.lessons;
     saveToStorage();
+    if(last.calendarVisibility && typeof window.restoreFinanceCalendarVisibility === 'function'){
+      window.restoreFinanceCalendarVisibility(last.calendarVisibility);
+    }
     renderCalendar();
     updateUndoBtn();
   }
@@ -1422,6 +1428,7 @@ body{
   const exportMonthBtn = document.getElementById('exportMonthBtn');
   const selectLessonsBtn = document.getElementById('selectLessonsBtn');
   const deleteSelectedBtn = document.getElementById('deleteSelectedBtn');
+  const deleteAllLessonsBtn = document.getElementById('deleteAllLessonsBtn');
   const markSelectedPaidBtn = document.getElementById('markSelectedPaidBtn');
   const selectionCount = document.getElementById('selectionCount');
   const studentSettingsList = document.getElementById('studentSettingsList');
@@ -1815,7 +1822,19 @@ body{
 
           const ignoredAfterScheduleEdit = Array.isArray(student.calendarIgnoredLessonIds) &&
             student.calendarIgnoredLessonIds.includes(financeLesson.id);
-          if(!calendarLesson && ignoredAfterScheduleEdit) return;
+          const clearedFromCalendar =
+            (Array.isArray(student.calendarClearedLessonIds) && student.calendarClearedLessonIds.includes(financeLesson.id)) ||
+            (financeLesson.paymentId && Array.isArray(student.calendarClearedPaymentIds) &&
+              student.calendarClearedPaymentIds.includes(financeLesson.paymentId));
+          // A deliberately rebuilt calendar card may reconnect to its paid
+          // finance lesson; otherwise a cleared card must not be recreated.
+          if(!calendarLesson && clearedFromCalendar && !ignoredAfterScheduleEdit){
+            calendarLesson = nextLessons.find(lesson =>
+              lesson.calendarOnly && lesson.date === financeLesson.date &&
+              lesson.name.trim().toLocaleLowerCase() === String(student.name).trim().toLocaleLowerCase()
+            );
+          }
+          if(!calendarLesson && (ignoredAfterScheduleEdit || clearedFromCalendar)) return;
 
           if(!calendarLesson){
             calendarLesson = nextLessons.find(lesson =>
@@ -1942,6 +1961,7 @@ body{
     if(selectionCount) selectionCount.textContent = selectionMode ? `Выбрано: ${count}` : '';
     if(markSelectedPaidBtn) markSelectedPaidBtn.classList.toggle('hidden', !selectionMode || count === 0);
     if(deleteSelectedBtn) deleteSelectedBtn.classList.toggle('hidden', !selectionMode || count === 0);
+    if(deleteAllLessonsBtn) deleteAllLessonsBtn.classList.toggle('hidden', !selectionMode || lessons.length === 0);
     if(selectLessonsBtn) selectLessonsBtn.textContent = selectionMode ? '✕ Завершить выбор' : '☑ Выбрать уроки';
   }
 
@@ -1985,6 +2005,27 @@ body{
       window.removeFinanceLessonsForCalendar(selected);
     }
     lessons = lessons.filter(lesson => !selectedLessonIds.has(lesson.id));
+    selectedLessonIds.clear();
+    selectionMode = false;
+    saveToStorage();
+    updateSelectionToolbar();
+    renderCalendar();
+  }
+
+  function deleteAllLessons(){
+    if(!lessons.length) return;
+    if(typeof window.hideFinanceLessonsFromCalendar !== 'function' ||
+      typeof window.captureFinanceCalendarVisibility !== 'function'){
+      alert('Финансовые данные ещё не загрузились. Обновите страницу и повторите очистку.');
+      return;
+    }
+    const count = lessons.length;
+    const message = `Удалить все уроки (${count}) во всех месяцах?\n\nКалендарь очистится и это изменение синхронизируется с другими устройствами. Ученики, абонементы и история оплат в «Финансах» останутся. Отменить очистку можно кнопкой ↶ до перезагрузки страницы.`;
+    if(!confirm(message)) return;
+    const calendarVisibility = window.captureFinanceCalendarVisibility();
+    pushUndo(`Очистка всего календаря (${count} уроков)`, {calendarVisibility});
+    window.hideFinanceLessonsFromCalendar();
+    lessons = [];
     selectedLessonIds.clear();
     selectionMode = false;
     saveToStorage();
@@ -2553,6 +2594,7 @@ body{
     renderCalendar();
   };
   deleteSelectedBtn.onclick = deleteSelectedLessons;
+  deleteAllLessonsBtn.onclick = deleteAllLessons;
   if(markSelectedPaidBtn) markSelectedPaidBtn.onclick = markSelectedLessonsPaid;
 
   bgUpload.onchange = (e) => {
@@ -3120,6 +3162,49 @@ body{
       });
       save();
       render();
+    } finally {
+      syncingFromCalendar = false;
+    }
+  };
+
+  window.captureFinanceCalendarVisibility = function(){
+    return state.students.map(student => ({
+      id: student.id,
+      lessonIds: [...(student.calendarClearedLessonIds || [])],
+      paymentIds: [...(student.calendarClearedPaymentIds || [])]
+    }));
+  };
+
+  window.hideFinanceLessonsFromCalendar = function(){
+    syncingFromCalendar = true;
+    try{
+      state.students.forEach(student => {
+        student.calendarClearedLessonIds = [...new Set([
+          ...(student.calendarClearedLessonIds || []),
+          ...(student.lessons || []).map(lesson => lesson.id).filter(Boolean)
+        ])];
+        student.calendarClearedPaymentIds = [...new Set([
+          ...(student.calendarClearedPaymentIds || []),
+          ...(student.payments || []).map(payment => payment.id).filter(Boolean)
+        ])];
+      });
+      save();
+    } finally {
+      syncingFromCalendar = false;
+    }
+  };
+
+  window.restoreFinanceCalendarVisibility = function(snapshot){
+    const previous = new Map((snapshot || []).map(entry => [entry.id, entry]));
+    syncingFromCalendar = true;
+    try{
+      state.students.forEach(student => {
+        const entry = previous.get(student.id);
+        if(!entry) return;
+        student.calendarClearedLessonIds = [...entry.lessonIds];
+        student.calendarClearedPaymentIds = [...entry.paymentIds];
+      });
+      save();
     } finally {
       syncingFromCalendar = false;
     }

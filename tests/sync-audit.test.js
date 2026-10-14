@@ -55,6 +55,35 @@ test('deleting a finance student also removes its linked calendar lessons', () =
   assert.deepEqual(Array.from(result.tutor_mvp_state_v5.students), []);
 });
 
+test('clearing the calendar syncs an empty calendar while keeping payments and hide markers', () => {
+  const sync = loadSync();
+  const student = {
+    id: 'student-1', name: 'Тест',
+    payments: [{ id: 'payment-1', lessons: 1 }],
+    lessons: [{ id: 'finance-lesson-1', paymentId: 'payment-1', date: '2026-10-15' }]
+  };
+  const base = {
+    tutorLessonsPro: [{ id: 'calendar-lesson-1', financeStudentId: 'student-1' }],
+    tutor_mvp_state_v5: { students: [student], notes: [] }
+  };
+  sync.localStorage.setItem('tutorSyncBase', JSON.stringify(base));
+  const local = {
+    tutorLessonsPro: [],
+    tutor_mvp_state_v5: {
+      students: [{ ...student,
+        calendarClearedLessonIds: ['finance-lesson-1'],
+        calendarClearedPaymentIds: ['payment-1'] }],
+      notes: []
+    }
+  };
+
+  const merged = sync.resolveSnapshot(base, local, {});
+  assert.equal(merged.tutorLessonsPro.length, 0);
+  assert.equal(merged.tutor_mvp_state_v5.students[0].payments.length, 1);
+  assert.equal(merged.tutor_mvp_state_v5.students[0].lessons.length, 1);
+  assert.deepEqual(Array.from(merged.tutor_mvp_state_v5.students[0].calendarClearedPaymentIds), ['payment-1']);
+});
+
 test('independent calendar, finance, notes and setting edits all survive reconciliation', () => {
   const sync = loadSync();
   const base = {
