@@ -3485,7 +3485,7 @@ body{
     );
 
     const originals = student.lessons
-      .filter(l => !l.generatedByMoveId)
+      .filter(l => !l.generatedByMoveId && !l.generatedByCancelId)
       .sort((a,b) => a.date.localeCompare(b.date));
 
     let cursor = 0;
@@ -3607,9 +3607,9 @@ body{
 
     const entitlements = [...groupsByEntitlement.entries()]
       .map(([id, lessons]) => {
-        const root = lessons.find(l => !l.generatedByMoveId) || lessons[0];
+        const root = lessons.find(l => !l.generatedByMoveId && !l.generatedByCancelId) || lessons[0];
         const effective = lessons.find(l =>
-          !lessons.some(x => x.generatedByMoveId === l.id)
+          !lessons.some(x => x.generatedByMoveId === l.id || x.generatedByCancelId === l.id)
         ) || root;
         return { id, lessons, source: root, effective };
       })
@@ -3623,10 +3623,9 @@ body{
       const effective = ent.effective;
       const hasFreeMove = ent.lessons.some(l => l.status === 'free-move');
 
-      // A free cancellation releases this entitlement. No replacement is
-      // created, so the paid lesson remains available for a later scheduled
-      // lesson instead of being consumed.
-      if(source.status === 'free-cancel' || effective.status === 'free-cancel'){
+      // A free cancellation keeps its paid entitlement. Its replacement is
+      // the effective lesson and will only consume the balance when taught.
+      if(effective.status === 'free-cancel'){
         effective.status = 'free-cancel';
         return;
       }
@@ -3766,6 +3765,30 @@ body{
     return null;
   }
 
+  function ensureFreeCancelReplacements(student){
+    ensureLessonEntitlements(student);
+    let added = 0;
+    // Existing records may have been cancelled in v9-v31, when the free
+    // cancellation handler stopped creating a replacement. Repair them once.
+    [...student.lessons].filter(lesson => lesson.status === 'free-cancel').forEach(lesson => {
+      if(student.lessons.some(other => other.generatedByCancelId === lesson.id)) return;
+      const lastDate = student.lessons.reduce(
+        (max, item) => item.date > max ? item.date : max,
+        lesson.date
+      );
+      const replacementDate = nextScheduleDate(student, lastDate > todayISO() ? lastDate : todayISO());
+      if(!replacementDate) return;
+      student.lessons.push({
+        id: uid(), date: replacementDate, time: lesson.time || student.time || '',
+        status: 'planned', movedFrom: lesson.date, generatedByCancelId: lesson.id,
+        entitlementId: lesson.entitlementId || uid(), paymentId: lesson.paymentId || null
+      });
+      added++;
+    });
+    if(added) student.lessons.sort((a,b) => a.date.localeCompare(b.date));
+    return added;
+  }
+
   window.setLessonStatus = async function(sid, lid, status){
     const s = state.students.find(x=>x.id===sid);
     const l = s && s.lessons.find(x=>x.id===lid);
@@ -3836,6 +3859,7 @@ body{
       }
     }
 
+    ensureFreeCancelReplacements(s);
     recalcLessons(s);
     save();
     render();
@@ -3849,9 +3873,9 @@ body{
       groups.get(l.entitlementId).push(l);
     });
     return [...groups.values()].map(lessons => {
-      const source = lessons.find(l => !l.generatedByMoveId) || lessons[0];
+      const source = lessons.find(l => !l.generatedByMoveId && !l.generatedByCancelId) || lessons[0];
       const effective = lessons.find(l =>
-        !lessons.some(other => other.generatedByMoveId === l.id)
+        !lessons.some(other => other.generatedByMoveId === l.id || other.generatedByCancelId === l.id)
       ) || source;
       return { lessons, source, effective };
     });
@@ -3965,11 +3989,15 @@ body{
         if(sid && lessons) preservedLessonScrolls[sid] = lessons.scrollTop;
       });
     }
+    let repairedFreeCancellations = 0;
     state.students.forEach(s=>{
       ensurePaymentColors(s);
       if(s.scheduleStart) ensurePaidScheduleComplete(s);
+      if(s.scheduleStart) repairedFreeCancellations += ensureFreeCancelReplacements(s);
       if(s.scheduleStart) recalcLessons(s);
     });
+    // Persist old cancellations before the next finance reload or cloud merge.
+    if(repairedFreeCancellations) save();
     const box = document.getElementById('students');
     box.innerHTML = '';
     document.getElementById('emptyMsg').style.display = state.students.length ? 'none':'block';
