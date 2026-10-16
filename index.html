@@ -3771,7 +3771,8 @@ body{
     // Existing records may have been cancelled in v9-v31, when the free
     // cancellation handler stopped creating a replacement. Repair them once.
     [...student.lessons].filter(lesson => lesson.status === 'free-cancel').forEach(lesson => {
-      if(student.lessons.some(other => other.generatedByCancelId === lesson.id)) return;
+      const replacementId = `free-cancel-replacement-${lesson.id}`;
+      if(student.lessons.some(other => other.generatedByCancelId === lesson.id || other.id === replacementId)) return;
       const lastDate = student.lessons.reduce(
         (max, item) => item.date > max ? item.date : max,
         lesson.date
@@ -3779,7 +3780,8 @@ body{
       const replacementDate = nextScheduleDate(student, lastDate > todayISO() ? lastDate : todayISO());
       if(!replacementDate) return;
       student.lessons.push({
-        id: uid(), date: replacementDate, time: lesson.time || student.time || '',
+        // Stable across devices: concurrent repairs merge as one lesson.
+        id: replacementId, date: replacementDate, time: lesson.time || student.time || '',
         status: 'planned', movedFrom: lesson.date, generatedByCancelId: lesson.id,
         entitlementId: lesson.entitlementId || uid(), paymentId: lesson.paymentId || null
       });

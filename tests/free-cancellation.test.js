@@ -93,6 +93,18 @@ test('free cancellation of a replacement extends its chain once more', () => {
   assert.equal(student.balance, 4);
 });
 
+test('two devices repairing the same old cancellations produce the same lesson IDs', () => {
+  const original = studentWithThreeFreeCancellations();
+  const first = JSON.parse(JSON.stringify(original));
+  const second = JSON.parse(JSON.stringify(original));
+  financeHarness().ensureFreeCancelReplacements(first);
+  financeHarness().ensureFreeCancelReplacements(second);
+  const firstIds = first.lessons.filter(l => l.generatedByCancelId).map(l => l.id);
+  const secondIds = second.lessons.filter(l => l.generatedByCancelId).map(l => l.id);
+  assert.deepEqual(firstIds, secondIds);
+  assert.equal(new Set([...firstIds, ...secondIds]).size, 3);
+});
+
 test('paid cancellation does not create a free replacement', () => {
   const app = financeHarness();
   const student = studentWithThreeFreeCancellations();
